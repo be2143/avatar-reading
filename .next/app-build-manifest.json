@@ -9,19 +9,19 @@
     "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/page.css",
       "static/chunks/app/page.js"
     ],
-    "/api/activities/route": [
+    "/video-lessons/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/activities/route.js"
+      "static/css/app/video-lessons/page.css",
+      "static/chunks/app/video-lessons/page.js"
     ],
-    "/routine/page": [
+    "/ai-analysis/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/routine/page.css",
-      "static/chunks/app/routine/page.js"
+      "static/css/app/ai-analysis/page.css",
+      "static/chunks/app/ai-analysis/page.js"
     ]
   }
 }
