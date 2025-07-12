@@ -42,7 +42,7 @@ export default function OverviewPage() {
               <h2 className="font-semibold text-lg">Quick Actions</h2>
               <div className="flex flex-col space-y-3">
                 <button className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded shadow">
-                  + Create New Story
+                  + Generate New Story
                 </button>
                 <button className="bg-white border border-purple-400 hover:bg-purple-100 text-purple-600 font-semibold py-2 px-4 rounded shadow">
                   + Add Student

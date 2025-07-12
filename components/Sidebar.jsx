@@ -16,7 +16,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="w-[120px] bg-white h-screen flex flex-col justify-between shadow-md items-center py-8">
+    <div className="fixed top-0 left-0 h-screen w-[120px] bg-white flex flex-col justify-between shadow-md items-center py-8 z-20">
       <div className="flex flex-col items-center space-y-10 w-full">
         {navItems.map((item) => {
           const isActive = pathname === item.path;
@@ -38,8 +38,12 @@ export default function Sidebar() {
         })}
       </div>
       <div className="mb-6">
-        <button className="text-red-500 text-xs hover:underline"
-          onClick={() => signOut()}>Logout</button>
+        <button
+          className="text-red-500 text-xs hover:underline"
+          onClick={() => signOut()}
+        >
+          Logout
+        </button>
       </div>
     </div>
   );
