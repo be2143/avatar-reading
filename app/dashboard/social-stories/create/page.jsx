@@ -1,7 +1,8 @@
+// app/dashboard/social-stories/create/page.jsx
 "use client";
 
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Loader2, Check, BookOpen, Image, Eye, Edit3, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, Check, BookOpen, Image, Eye, Edit3, RefreshCw, Save } from 'lucide-react'; // Import Save icon
 
 export default function CreateStoryPage() {
     const [currentStep, setCurrentStep] = useState(1);
@@ -9,6 +10,8 @@ export default function CreateStoryPage() {
     const [error, setError] = useState('');
     const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
     const [regeneratingScene, setRegeneratingScene] = useState(null);
+    const [saving, setSaving] = useState(false); // New state for saving status
+    const [storyId, setStoryId] = useState(null); // New state to store the actual DB _id
 
     const [formData, setFormData] = useState({
         title: '',
@@ -19,9 +22,11 @@ export default function CreateStoryPage() {
         specificScenarios: '',
         generatedText: '',
         visualScenes: [], // Array of { id, title, text, image }
+        mainCharacterDescription: '',
+        otherCharacters: [],
         selectedStyle: 'cartoon',
-        finalStory: null,
-        dummyStoryId: Date.now().toString() // Generate a unique ID for API calls
+        // finalStory: null, // This might become redundant if `story_content` + `visualScenes` is the final story
+        dummyStoryId: Date.now().toString() // Generate a unique ID for initial API calls before DB _id
     });
 
     const [showGeneratedText, setShowGeneratedText] = useState(false);
@@ -52,9 +57,78 @@ export default function CreateStoryPage() {
         } else if (currentStep === 2) {
             await generateVisualScenes();
         } else if (currentStep === 3) {
-            alert("Story review complete. You can go back to generate new visuals or refine the text.");
+            // Optional: Auto-save on final step completion or prompt user to save
+            alert("Story review complete. You can go back to generate new visuals or refine the text. Don't forget to save!");
         }
     };
+
+    // --- NEW: handleSaveStory function ---
+    const handleSaveStory = async () => {
+        setSaving(true);
+        setError('');
+
+        if (!formData.title.trim()) {
+            setError('Please add a story title before saving.');
+            setSaving(false);
+            return;
+        }
+
+        if (!formData.generatedText.trim()) {
+            setError('Story text is empty. Generate text before saving.');
+            setSaving(false);
+            return;
+        }
+
+        try {
+            const payload = {
+                _id: storyId, // Pass the actual DB _id if it exists
+                dummyStoryId: formData.dummyStoryId, // Always pass dummyId for tracking
+                title: formData.title,
+                description: formData.description,
+                category: formData.category,
+                ageGroup: formData.ageGroup,
+                storyLength: formData.storyLength,
+                specificScenarios: formData.specificScenarios,
+                generatedText: formData.generatedText,
+                mainCharacterDescription: formData.mainCharacterDescription,
+                otherCharacters: formData.otherCharacters,
+                visualScenes: formData.visualScenes,
+                selectedStyle: formData.selectedStyle,
+            };
+
+            console.log("Saving payload:", payload);
+
+            const response = await fetch('/api/stories/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to save story to database.');
+            }
+
+            const data = await response.json();
+            console.log("Story saved successfully:", data.story);
+            // If it's a new story, capture the actual _id from the database
+            if (data.story._id && !storyId) {
+                setStoryId(data.story._id);
+                // Optionally update formData.dummyStoryId if you want to remove it
+                // setFormData(prev => ({ ...prev, dummyStoryId: data.story._id }));
+            }
+            alert("Story saved successfully!");
+        } catch (err) {
+            console.error('Error saving story:', err);
+            setError(`Failed to save story: ${err.message}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+    // --- END NEW: handleSaveStory function ---
+
 
     const generateStoryText = async () => {
         setLoading(true);
@@ -99,7 +173,7 @@ export default function CreateStoryPage() {
         setFormData({ ...formData, generatedText: e.target.value });
     };
 
-    // API call to generate visual scenes for the story (WITH dummy storyId)
+    // API call to generate visual scenes for the story
     const generateVisualScenes = async () => {
         setLoading(true);
         setError('');
@@ -129,14 +203,27 @@ export default function CreateStoryPage() {
             }
 
             const data = await response.json();
-            const scenes = data.images.map((imgData, index) => ({
-                id: index + 1,
-                title: `Scene ${index + 1}`,
-                text: imgData.paragraph,
-                image: imgData.imageUrl,
+
+            console.log("Full API Response Data:", data);
+
+            if (!data.visualScenes || !Array.isArray(data.visualScenes)) {
+                console.error("API response error: 'visualScenes' array is missing or malformed.", data);
+                throw new Error("Failed to get visual scenes from API. Invalid response format.");
+            }
+
+            const scenes = data.visualScenes.map((sceneData) => ({
+                id: sceneData.sceneNumber,
+                title: `Scene ${sceneData.sceneNumber}`,
+                text: sceneData.sceneText,
+                image: sceneData.imageUrl,
             }));
 
-            setFormData({ ...formData, visualScenes: scenes });
+            setFormData({
+                ...formData,
+                visualScenes: scenes,
+                mainCharacterDescription: data.mainCharacterDescription || '',
+                otherCharacters: data.otherCharacters || [],
+            });
             setCurrentStep(3);
             setSelectedSceneIndex(0);
             setError('');
@@ -148,7 +235,7 @@ export default function CreateStoryPage() {
         }
     };
 
-    // API call to regenerate a single scene's image (WITH dummy storyId)
+    // API call to regenerate a single scene's image
     const regenerateScene = async (sceneIndex) => {
         setRegeneratingScene(sceneIndex);
         setError('');
@@ -167,7 +254,7 @@ export default function CreateStoryPage() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    storyId: formData.dummyStoryId, // Include the dummy storyId
+                    storyId: formData.dummyStoryId,
                     text: sceneToRegenerate.text,
                     visualStyle: formData.selectedStyle,
                 }),
@@ -342,14 +429,24 @@ export default function CreateStoryPage() {
                                     rows="15"
                                     className="w-full border border-gray-300 rounded-md shadow-sm p-3 mb-4 resize-y focus:ring-purple-500 focus:border-purple-500"
                                 ></textarea>
-                                <button
-                                    onClick={regenerateText}
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50 flex items-center"
-                                >
-                                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                                    Regenerate Text
-                                </button>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={regenerateText}
+                                        disabled={loading}
+                                        className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50 flex items-center"
+                                    >
+                                        {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                                        Regenerate Text
+                                    </button>
+                                    <button
+                                        onClick={handleSaveStory} // Save button after text generation
+                                        disabled={saving || loading || !formData.generatedText.trim()}
+                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center"
+                                    >
+                                        {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                        Save Text
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -384,6 +481,14 @@ export default function CreateStoryPage() {
                             </div>
 
                             <div className="flex gap-3">
+                                <button
+                                    onClick={handleSaveStory} // Save button before visuals generation
+                                    disabled={saving || loading || !formData.generatedText.trim()}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center"
+                                >
+                                    {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                    Save Progress
+                                </button>
                                 <button
                                     onClick={generateVisualScenes}
                                     disabled={loading || !formData.generatedText.trim()}
@@ -421,73 +526,104 @@ export default function CreateStoryPage() {
                     </div>
                 )}
 
-                {currentStep === 3 && (
-                    <div className="bg-white p-8 rounded-lg shadow-md">
-                        <h1 className="text-2xl font-bold mb-6 text-purple-800">Review Generated Visual Story</h1>
+{currentStep === 3 && (
+    <div className="bg-white p-8 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold mb-6 text-purple-800">Review Generated Visual Story</h1>
 
-                        <div className="grid lg:grid-cols-3 gap-6">
-                            <div className="lg:col-span-1 border-r pr-6">
-                                <h3 className="text-lg font-semibold mb-4">Scene Navigation</h3>
-                                <div className="flex flex-col gap-2">
-                                    {formData.visualScenes.map((scene, index) => (
-                                        <button
-                                            key={index}
-                                            onClick={() => setSelectedSceneIndex(index)}
-                                            className={`block w-full text-left p-3 rounded-lg ${selectedSceneIndex === index ? 'bg-purple-100 text-purple-800 font-semibold' : 'hover:bg-gray-50 text-gray-700'
-                                                }`}
-                                        >
-                                            Scene {index + 1}: {scene.text.substring(0, 40)}...
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+        {formData.mainCharacterDescription && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-800 mb-2">Main Character Details:</h3>
+                <p className="text-blue-700">{formData.mainCharacterDescription}</p>
+                {formData.otherCharacters.length > 0 && (
+                    <>
+                        <h4 className="text-md font-medium text-blue-700 mt-3">Other Characters:</h4>
+                        <ul className="list-disc list-inside text-blue-700">
+                            {formData.otherCharacters.map((char, idx) => (
+                                <li key={idx}>{char}</li>
+                            ))}
+                        </ul>
+                    </>
+                )}
+                <p className="text-sm text-blue-600 mt-2">
+                    (These details were used to keep characters consistent across visuals.)
+                </p>
+            </div>
+        )}
 
-                            <div className="lg:col-span-2">
-                                {formData.visualScenes[selectedSceneIndex] && (
-                                    <div className="bg-white border rounded-lg p-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-lg font-semibold">
-                                                Scene {selectedSceneIndex + 1}
-                                            </h3>
-                                            <button
-                                                onClick={() => regenerateScene(selectedSceneIndex)}
-                                                disabled={regeneratingScene === selectedSceneIndex}
-                                                className="px-3 py-1 bg-yellow-200 text-yellow-800 rounded-full text-sm hover:bg-yellow-300 disabled:opacity-50 flex items-center"
-                                            >
-                                                {regeneratingScene === selectedSceneIndex ? (
-                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                                ) : (
-                                                    <RefreshCw className="w-4 h-4 mr-2" />
-                                                )}
-                                                Regenerate Image
-                                            </button>
-                                        </div>
-                                        <div className="mb-4">
-                                            <img
-                                                src={formData.visualScenes[selectedSceneIndex].image}
-                                                alt={`Scene ${selectedSceneIndex + 1}`}
-                                                className="w-full h-80 object-contain rounded-md bg-gray-100"
-                                                onError={(e) => { e.target.src = "https://via.placeholder.com/600x400.png?text=Image+Load+Error"; }}
-                                                loading="lazy"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="sceneText" className="block text-sm font-medium text-gray-700 mb-2">Scene Text</label>
-                                            <textarea
-                                                id="sceneText"
-                                                value={formData.visualScenes[selectedSceneIndex].text}
-                                                onChange={(e) => handleSceneTextEdit(selectedSceneIndex, e.target.value)}
-                                                rows="5"
-                                                className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
-                                            ></textarea>
-                                        </div>
-                                    </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 border-r pr-6">
+                <h3 className="text-lg font-semibold mb-4">Scene Navigation</h3>
+                <div className="flex flex-col gap-2">
+                    {formData.visualScenes.map((scene, index) => (
+                        <button
+                            key={scene.id}
+                            onClick={() => setSelectedSceneIndex(index)}
+                            className={`block w-full text-left p-3 rounded-lg ${selectedSceneIndex === index ? 'bg-purple-100 text-purple-800 font-semibold' : 'hover:bg-gray-50 text-gray-700'
+                                }`}
+                        >
+                            Scene {index + 1}: {scene.text.substring(0, 40)}...
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="lg:col-span-2">
+                {formData.visualScenes[selectedSceneIndex] && (
+                    <div className="bg-white border rounded-lg p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold">
+                                Scene {selectedSceneIndex + 1}
+                            </h3>
+                            <button
+                                onClick={() => regenerateScene(selectedSceneIndex)}
+                                disabled={regeneratingScene === selectedSceneIndex}
+                                className="px-3 py-1 bg-yellow-200 text-yellow-800 rounded-full text-sm hover:bg-yellow-300 disabled:opacity-50 flex items-center"
+                            >
+                                {regeneratingScene === selectedSceneIndex ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="w-4 h-4 mr-2" />
                                 )}
-                            </div>
+                                Regenerate Image
+                            </button>
+                        </div>
+                        <div className="mb-4">
+                            <img
+                                key={formData.visualScenes[selectedSceneIndex].id}
+                                src={formData.visualScenes[selectedSceneIndex].image}
+                                alt={`Scene ${selectedSceneIndex + 1}`}
+                                className="w-full h-80 object-contain rounded-md bg-gray-100"
+                                onError={(e) => { e.target.src = "https://via.placeholder.com/600x400.png?text=Image+Load+Error"; }}
+                                loading="lazy"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="sceneText" className="block text-sm font-medium text-gray-700 mb-2">Scene Text</label>
+                            <textarea
+                                id="sceneText"
+                                value={formData.visualScenes[selectedSceneIndex].text}
+                                onChange={(e) => handleSceneTextEdit(selectedSceneIndex, e.target.value)}
+                                rows="5"
+                                className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
+                            ></textarea>
                         </div>
                     </div>
                 )}
-
+            </div>
+        </div>
+        <div className="mt-8 flex justify-end">
+            <button
+                onClick={handleSaveStory} // Save button after visuals are regenerated (Step 3)
+                disabled={saving || loading || !formData.visualScenes.length}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 flex items-center"
+            >
+                {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
+                Save Final Story
+            </button>
+        </div>
+    </div>
+)}
+                
                 <div className="mt-8 flex justify-between">
                     <button
                         onClick={handleBack}
@@ -499,7 +635,7 @@ export default function CreateStoryPage() {
 
                     <button
                         onClick={handleNext}
-                        disabled={loading || (currentStep === 1 && !formData.generatedText.trim() && showGeneratedText)}
+                        disabled={loading || saving || (currentStep === 1 && !formData.generatedText.trim() && showGeneratedText)}
                         className="px-6 py-3 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                     >
                         {loading && (currentStep === 1 || currentStep === 2) ? (

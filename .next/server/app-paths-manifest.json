@@ -1,5 +1,7 @@
 {
-  "/page": "app/page.js",
-  "/video-lessons/page": "app/video-lessons/page.js",
-  "/ai-analysis/page": "app/ai-analysis/page.js"
+  "/dashboard/students/page": "app/dashboard/students/page.js",
+  "/dashboard/students/[id]/page": "app/dashboard/students/[id]/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/students/add/page": "app/dashboard/students/add/page.js",
+  "/dashboard/social-stories/[id]/read/page": "app/dashboard/social-stories/[id]/read/page.js"
 }

@@ -1,49 +1,71 @@
-import mongoose from "mongoose";
+import mongoose, { Schema, models } from "mongoose";
 
-const sceneSchema = new mongoose.Schema({
-  text: { type: String, required: true },
-  imageUrl: { type: String, required: true },
-  // You might add an imagePrompt field here if you want to store the exact prompt used for this scene's image
-  // imagePrompt: { type: String },
+// Define a schema for individual scenes within a story
+const sceneSchema = new Schema({
+  // Using 'id' from the frontend mapping, which comes from sceneData.sceneNumber
+  id: { type: Number, required: true },
+  title: { type: String }, // Corresponds to `Scene N` title from frontend
+  text: { type: String, required: true }, // The scene's text snippet
+  image: { type: String }, // The URL of the generated image for this scene
+  // imagePrompt: { type: String }, // Keep if you want to store the exact DALL-E prompt used for the image
 });
 
-const storySchema = new mongoose.Schema({
-  id: { type: String, unique: true },  // add this
-  // id: Number, // Mongoose automatically creates an _id (ObjectId). You typically don't need a separate 'id' field unless it's an external ID.
-  title: { type: String, required: true }, // Make title required
-  description: { type: String }, // Corresponds to purpose/situation
-  // chapter: String, // Keep if needed for other functionality, but not used in current flow
-  // explanation: String, // Keep if needed for other functionality, but not used in current flow
-  story_content: { type: String, required: true }, // This will store the generatedText
-  category: { type: String },
-  ageGroup: { type: String }, // Add ageGroup from your frontend form
-  storyLength: { type: String }, // Add storyLength from your frontend form
-  specificScenarios: { type: String }, // Add specificScenarios from your frontend form
+// Define the main story schema
+const storySchema = new Schema(
+  {
+    // The default MongoDB _id (ObjectId) is best for unique identification.
+    // If you need a specific string 'id' for external reasons, keep it,
+    // but often it's redundant with _id.
+    // However, if you explicitly want to use a `dummyStoryId` from frontend
+    // as a persistent string ID, let's keep it but make it sparse.
+    dummyStoryId: { type: String, unique: true, sparse: true }, // Used for temporary tracking before _id is set
 
-  isPersonalized: { type: Boolean, default: false },
-  student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', default: null },
+    title: { type: String, required: true },
+    description: { type: String }, // Corresponds to 'purpose/situation'
+    story_content: { type: String, required: true }, // This stores the full generated text
 
-  // --- NEW FIELDS FOR GENERATION STATUS AND VISUALS ---
-  isGenerated: { type: Boolean, default: false }, // True once text is successfully generated and saved
-  hasImages: { type: Boolean, default: false },   // True once images are successfully generated and saved
-  scenes: [sceneSchema], // Array of sub-documents for each scene
-  
-  // --- STORY SOURCE INFORMATION ---
-  source: { 
-    type: String, 
-    enum: ['system', 'generated', 'uploaded'], 
-    default: 'system',
-    required: true 
-  }, // Indicates if story was system-provided, AI generated, or user uploaded
-  createdBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    default: null 
-  }, // Reference to user who created/uploaded the story
-  authorName: { type: String }, // For uploaded stories, store the original author name
-  uploadedFileName: { type: String }, // For uploaded stories, store original file name
-  // ----------------------------------------------------
+    category: { type: String },
+    ageGroup: { type: String },
+    storyLength: { type: String },
+    specificScenarios: { type: String }, // Additional details/guidelines for generation
 
-}, { timestamps: true });
+    // --- NEW FIELDS FOR CHARACTER CONSISTENCY & VISUALS ---
+    mainCharacterDescription: { type: String }, // Detailed description of the main character
+    otherCharacters: [{ type: String }],         // Array of descriptions for other characters
+    selectedStyle: { type: String },             // The visual style chosen (e.g., 'cartoon')
+    visualScenes: [sceneSchema],                 // Array of visual scene objects
 
-export default mongoose.models.Story || mongoose.model("Story", storySchema);
+    // --- GENERATION & IMAGE STATUS ---
+    isGenerated: { type: Boolean, default: false }, // True if story text was AI-generated
+    hasImages: { type: Boolean, default: false },   // True if visuals have been generated
+
+    // --- STORY SOURCE & AUTHORSHIP ---
+    source: {
+      type: String,
+      enum: ['system', 'generated', 'uploaded'],
+      default: 'generated', // Default to 'generated' as this flow is for AI generation
+      required: true
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User', // Assuming you have a User model for authentication
+      default: null
+    },
+    // The following are more relevant for 'uploaded' source stories,
+    // but you can keep them if you envision merging functionalities.
+    authorName: { type: String },
+    uploadedFileName: { type: String },
+
+    // --- PERSONALIZATION (from your original model) ---
+    isPersonalized: { type: Boolean, default: false },
+    student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', default: null },
+
+    // Removed fields not currently used in the generation flow:
+    // chapter: String,
+    // explanation: String,
+  },
+  { timestamps: true } // Automatically adds createdAt and updatedAt fields
+);
+
+// Export the model
+export default models.Story || mongoose.model("Story", storySchema);

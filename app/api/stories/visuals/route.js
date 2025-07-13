@@ -1,46 +1,61 @@
 // app/api/stories/visuals/route.js
-import { NextResponse } from 'next/server'; // Import NextResponse for proper API responses
-import { generateImageFromText } from '@/lib/imageGenerator'; // Import your image generation utility
-import { splitStoryIntoParagraphs } from '@/lib/storyProcessor'; // Assuming you have this utility
-
-// NOTE: You do NOT need to import connectDB or Story model here
-// if you have chosen to remove database persistence from this specific API endpoint,
-// as per our previous discussion. If you *do* intend to use the DB,
-// then uncomment/add those imports and the DB logic.
-
+import { NextResponse } from 'next/server';
+import { generateImageFromText } from '@/lib/imageGenerator';
+import { processStoryForVisuals } from '@/lib/storyProcessor'; // NEW LLM utility
 
 export async function POST(request) {
   try {
-    // Parse the request body
-    const { storyId, storyText, visualStyle } = await request.json();
+    const { storyText, visualStyle = "cartoon" } = await request.json();
 
-    // Basic validation
-    if (!storyText || !visualStyle) {
-      return NextResponse.json({ error: 'Story text and visual style are required.' }, { status: 400 });
+    if (!storyText) {
+      return NextResponse.json({ error: 'Story text is required.' }, { status: 400 });
     }
 
-    // Split story into paragraphs (assuming this utility exists)
-    const paragraphs = splitStoryIntoParagraphs(storyText);
-    const generatedImages = [];
+    console.log("Processing story to identify main character and scenes...");
+    const { mainCharacterDescription, otherCharacters, scenes } = await processStoryForVisuals(storyText);
+    console.log("Main Character identified:", mainCharacterDescription);
+    console.log("Other Characters:", otherCharacters);
+    console.log("Scenes identified:", scenes.length);
 
-    // Loop through paragraphs to generate images
-    for (const paragraph of paragraphs) {
-      const prompt = `Generate a ${visualStyle} style illustration for a children's story depicting: "${paragraph}". The image should be simple, friendly, and appealing to young children.`;
-      console.log(`Generating image for prompt: ${prompt}`);
-      const imageUrl = await generateImageFromText(prompt); // Call the imported utility function
+    const generatedVisuals = [];
 
-      generatedImages.push({
-        paragraph,
-        imageUrl,
+    // Combine all character descriptions into one strong prefix for DALL-E
+    // Emphasize the main character heavily
+    let allCharacterPrompts = `Main character: ${mainCharacterDescription}.`;
+    if (otherCharacters.length > 0) {
+        allCharacterPrompts += " Other characters present: " + otherCharacters.join(' ');
+    }
+
+    // Loop through each identified scene to generate an image
+    for (const scene of scenes) {
+      // Construct a highly detailed prompt for DALL-E
+      // Always start with the consistent character description
+      const dallEPrompt = `
+      **A children's story illustration in a ${visualStyle} style.**
+      **Consistent Character Details:** ${allCharacterPrompts}
+      **Scene:** "${scene.sceneText}".
+      Ensure the main character, exactly as described, is present and consistently portrayed in this scene. Focus on key visual elements described in the scene text. The overall image should be simple, friendly, and appealing to young children.
+      `;
+
+      console.log(`Generating image for Scene ${scene.sceneNumber} with prompt (truncated): ${dallEPrompt.substring(0, 200)}...`);
+      const imageUrl = await generateImageFromText(dallEPrompt);
+
+      generatedVisuals.push({
+        sceneNumber: scene.sceneNumber,
+        sceneText: scene.sceneText,
+        imageUrl: imageUrl,
       });
     }
 
-    // Return the generated images
-    return NextResponse.json({ message: 'Visual scenes generated successfully', images: generatedImages }, { status: 200 });
+    return NextResponse.json({
+      message: 'Visual scenes and characters generated successfully',
+      mainCharacterDescription: mainCharacterDescription, // Send back main character
+      otherCharacters: otherCharacters, // Send back other characters
+      visualScenes: generatedVisuals,
+    }, { status: 200 });
 
   } catch (error) {
     console.error('Error in /api/stories/visuals:', error);
-    // Return a generic error or specific message from the thrown error
     return NextResponse.json({ error: `Failed to generate visual scenes: ${error.message}` }, { status: 500 });
   }
 }
