@@ -1,3 +1,4 @@
+// app/api/register/route.js
 import { connectMongoDB } from "@/lib/mongodb";
 import User from "@/models/user";
 import { NextResponse } from "next/server";
@@ -8,49 +9,54 @@ export async function POST(req) {
     const formData = await req.formData();
 
     const name = formData.get("name");
-    const email = formData.get("email"); // <--- Problematic variable
+    const email = formData.get("email");
     const password = formData.get("password");
-    const imageFile = formData.get("image");
+    const imageFile = formData.get("image"); // This is a File object
 
-    // ✅ DEBUGGING OUTPUT
+    // ✅ DEBUGGING OUTPUT (keep these for development)
     console.log("Name:", name);
-    console.log("Email:", email); // <<<--- ADD THIS LINE!!!
+    console.log("Email:", email);
     console.log("Password (length):", password ? password.length : 'N/A');
     console.log("imageFile type:", typeof imageFile);
     console.log("imageFile instanceof File:", imageFile instanceof File);
     console.log("imageFile name:", imageFile?.name);
+    console.log("imageFile MIME type:", imageFile?.type); // Log the MIME type
 
 
     if (!imageFile || !(imageFile instanceof File)) {
       return NextResponse.json({ message: "Image is required." }, { status: 400 });
     }
 
+    // Convert imageFile to ArrayBuffer
     const arrayBuffer = await imageFile.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString("base64");
+    // Convert ArrayBuffer to raw Base64 string
+    const rawBase64Image = Buffer.from(arrayBuffer).toString("base64");
+
+    // --- CRITICAL CHANGE HERE: Prepend the data URI prefix ---
+    // Use the actual MIME type from the File object
+    const fullBase64Image = `data:${imageFile.type};base64,${rawBase64Image}`;
+    // ---------------------------------------------------------
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     await connectMongoDB();
 
     // Check if user with this email already exists before trying to create
-    // This won't prevent the `null` duplicate error if it's the *first* null,
-    // but it's good practice for non-null emails.
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       console.warn("Attempted registration with existing email:", email);
       return NextResponse.json({ message: "User with this email already exists." }, { status: 409 });
     }
 
-
     const user = await User.create({
       name,
-      email, // This is where `null` is being passed
+      email,
       password: hashedPassword,
-      image: base64Image,
+      image: fullBase64Image, // Save the full data URI string
     });
 
-    console.log("User saved with image size:", base64Image.length);
-    console.log("Registered user ID:", user._id); // Log the new user ID
+    console.log("User saved with image size:", fullBase64Image.length);
+    console.log("Registered user ID:", user._id);
 
     return NextResponse.json({ message: "User registered." }, { status: 201 });
   } catch (error) {

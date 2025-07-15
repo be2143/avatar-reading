@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import SystemInsights from '@/components/SystemInsights';
 import RecentActivity from '@/components/RecentActivity';
 import StudentsGrid from '@/components/StudentsGrid';
+import Image from 'next/image'; 
 
 export default function OverviewPage() {
   const { data: session } = useSession();
@@ -18,10 +19,17 @@ export default function OverviewPage() {
         {/* User Profile Picture */}
         <div className="w-32 h-32 rounded-full border-2 border-purple-300 overflow-hidden bg-purple-100">
           {userImage ? (
-            <img
-              src={`data:image/jpeg;base64,${userImage}`}
+            // --- FIX IS HERE ---
+            // Use Next.js Image component for better optimization and direct src
+            <Image
+              src={userImage} // userImage now contains the full data URI (e.g., data:image/png;base64,...)
               alt={`${userName}'s profile`}
-              className="w-full h-full object-cover"
+              width={128} // Set explicit width and height for Next.js Image
+              height={128}
+              objectFit="cover" // equivalent to Tailwind's object-cover
+              unoptimized={userImage.startsWith('data:')} // Crucial for base64 images
+              // For external URLs that are *not* in next.config.js remotePatterns/domains, you'd also use unoptimized={true}
+              // However, since we're assuming local base64, this is fine.
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-purple-600 font-bold text-xl">

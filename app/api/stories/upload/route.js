@@ -30,7 +30,7 @@ export async function POST(request) {
       story_content,
       postedBy, // You might want to add this field to your schema if it's not there
       isPersonalized: isPersonalized || false,
-      isGenerated: true, // Since this is user-uploaded content, mark as generated
+      isGenerated: false, // Since this is user-uploaded content, mark as generated
       hasImages: false, // No images initially for user uploads
       scenes: [] // Empty scenes array initially
     });
