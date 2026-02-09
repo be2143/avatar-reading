@@ -2,8 +2,7 @@ import { makeRe } from 'next/dist/compiled/picomatch';
 // Modifying this function should also modify writeImagesManifest()
 export function matchRemotePattern(pattern, url) {
     if (pattern.protocol !== undefined) {
-        const actualProto = url.protocol.slice(0, -1);
-        if (pattern.protocol !== actualProto) {
+        if (pattern.protocol.replace(/:$/, '') !== url.protocol.replace(/:$/, '')) {
             return false;
         }
     }
@@ -13,7 +12,11 @@ export function matchRemotePattern(pattern, url) {
         }
     }
     if (pattern.hostname === undefined) {
-        throw new Error("Pattern should define hostname but found\n" + JSON.stringify(pattern));
+        throw Object.defineProperty(new Error("Pattern should define hostname but found\n" + JSON.stringify(pattern)), "__NEXT_ERROR_CODE", {
+            value: "E410",
+            enumerable: false,
+            configurable: true
+        });
     } else {
         if (!makeRe(pattern.hostname).test(url.hostname)) {
             return false;

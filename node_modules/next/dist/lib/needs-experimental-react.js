@@ -9,8 +9,8 @@ Object.defineProperty(exports, "needsExperimentalReact", {
     }
 });
 function needsExperimentalReact(config) {
-    const { ppr, taint, reactOwnerStack } = config.experimental || {};
-    return Boolean(ppr || taint || reactOwnerStack);
+    const { ppr, taint, viewTransition, routerBFCache } = config.experimental || {};
+    return Boolean(ppr || taint || viewTransition || routerBFCache);
 }
 
 //# sourceMappingURL=needs-experimental-react.js.map

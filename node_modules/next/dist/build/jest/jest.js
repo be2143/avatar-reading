@@ -90,7 +90,11 @@ async function getConfig(dir) {
  * Loads closest package.json in the directory hierarchy
  */ function loadClosestPackageJson(dir, attempts = 1) {
     if (attempts > 5) {
-        throw new Error("Can't resolve main package.json file");
+        throw Object.defineProperty(new Error("Can't resolve main package.json file"), "__NEXT_ERROR_CODE", {
+            value: "E139",
+            enumerable: false,
+            configurable: true
+        });
     }
     var mainPath = attempts === 1 ? './' : Array(attempts).join('../');
     try {
@@ -165,7 +169,7 @@ function nextJest(options = {}) {
                     // Handle next/font
                     'next/font/(.*)': require.resolve('./__mocks__/nextFontMock.js'),
                     // Disable server-only
-                    'server-only': require.resolve('./__mocks__/empty.js'),
+                    '^server-only$': require.resolve('./__mocks__/empty.js'),
                     // custom config comes last to ensure the above rules are matched,
                     // fixes the case where @pages/(.*) -> src/pages/$! doesn't break
                     // CSS/image mocks

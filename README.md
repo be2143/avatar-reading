@@ -1,68 +1,87 @@
+# Voxy-Social Story Teller
 
-# **Voxy – Assistive Speech App for Children with speech impairments** 🗣️🤖  
-Voxy is an **AI-powered assistive communication (AAC) app** designed to help children with **speech impairments**, communicate effectively. The app features **real-time vocabulary recommendations, an AI-driven interaction analysis system, and a chatbot support system for parents**.  
-Our goal is to give every child a voice and allow to have big communcations through little tabs. 
-## **Features** 🚀  
+This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://www.google.com/search?q=%5Bhttps://github.com/vercel/next.js/tree/canary/packages/create-next-app%5D\(https://github.com/vercel/next.js/tree/canary/packages/create-next-app\)).
 
-### **1. Augmentative and Alternative Communication (AAC) 📖**  
-- Provides an **interactive visual vocabulary** for children with speech impairments.  
-- Allows children to **select words and phrases** to express themselves.  
+-----
 
-### **2. AI-Powered Vocabulary Recommendation 🧠**  
-- **Real-time suggestions**: Analyzes words inputted by the child and **recommends relevant vocabulary** from a pre-built dataset.  
-- Enhances the child's communication by expanding their language **in a personalized way**.  
+## Getting Started
 
-### **3. Routine Builder 🗓️**  
-- Helps children and parents create **structured daily routines** with visual cues and choose for the day.  
-- Supports **task sequencing** for improved independence in daily activities.  
+To get this project up and running on your local machine, follow these steps:
 
-### **4. AI-Driven Interaction Analysis 📊**  
-- Monitors and **analyzes the child's daily interactions** with the app.  
-- Provides **personalized insights** to parents, helping them understand their child's communication patterns and progress.  
+### 1\. Install Node.js and npm
 
-### **5. Parent Chatbot Support 🤖👨‍👩‍👧**  
-- Offers **AI-powered guidance** to parents based on their child’s usage.  
-- Suggests **communication strategies and exercises** to enhance learning.  
+If you don't have **Node.js** (which includes **npm**) installed, you'll need to get it first. You can download the recommended version from the official Node.js website:
 
-## **Tech Stack** 🛠️  
-- **Front-end**: React.js, Next.js  
-- **Back-end**: OpenAI API, Mongoose
-- **Database**: MongoDB, Custom Dataset for AAC  
+  * **Download Node.js:** [https://nodejs.org/en/download/](https://nodejs.org/en/download/)
 
-## **Setup Instructions** 🏗️  
+Alternatively, you can use a Node.js version manager like `nvm` (Node Version Manager) for more flexibility.
 
-1. Clone this repository:  
-   ```bash
-   git clone https://github.com/yourusername/voxy.git
-   cd voxy
+To verify your installation, open your terminal or command prompt and run:
 
-## Setup Instructions
-1. **Clone the Repository**:
+```bash
+node -v
+npm -v
+```
 
-   ```
-   git clone https://github.com/aruzhan-bolatova/Slush-D-Hack.git
-   cd Slush-D-Hack
-   ```
+This should display the installed versions of Node.js and npm.
 
-2. **Install Dependencies**:
+### 2\. Install Project Dependencies
 
-   ```
-   npm install
-   ```
+Navigate to the root directory of your project in your terminal and install all necessary dependencies using npm:
 
-   Run the above to install all necessary packages.
+```bash
+npm install
+```
 
-3. **Create .env file and write the credentials:**
+This command reads the `package.json` file and installs all the listed dependencies required for the project to run.
 
-    MONGODB_URI=your_credentials
-    GROQ_CLOUD_API_KEY=your_credentials
-    ELEVENLABS_API_KEY=your_credentials
+### 3\. Configure Environment Variables
 
-4. **Run it:
+Create a file named **`.env`** in the root of your project and add the following environment variables. **Remember to replace these placeholder values with your actual API keys and secrets.**
 
-    ```bash
-    npm run dev
-    ```
+```bash
+MONGODB_URI=mongodb+srv://be2143:HbnUc1DeihKQ0lUG@cluster0.enjzhry.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+GEMINI_API_KEY=AIzaSyDVIwuwepnL9Zyrxt6TAZVVIPKnAWyRj8E
+GPT_API_KEY=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
+NEXTAUTH_URL=http://localhost:3000
+SEGMIND_API_KEY=SG_316d207b269a07b1
+CLOUDINARY_CLOUD_NAME=dvyf1nf8s
+CLOUDINARY_API_KEY=242239469272267
+CLOUDINARY_API_SECRET=F_tDN9qL6b3o84jOxJYX2zGLV3Q
+AWS_ACCESS_KEY_ID=AKIAUQ4L3FG3S5KYPE66
+AWS_SECRET_ACCESS_KEY=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
+UPSTASH_REDIS_REST_URL=https://special-dog-21226.upstash.io
+UPSTASH_REDIS_REST_TOKEN=AVLqAAIncDEyN2U1YmZiMGQyMGU0YWI0OTY1YjBkZDUyMzY0MjUwNnAxMjEyMjY
+NEXTAUTH_SECRET=YOUR_GENERATED_SECRET_HERE
+```
+Generate NEXTAUTH_SECRET:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+For the NEXTAUTH_SECRET, it is crucial to use a strong, randomly generated string. You can generate one directly in your terminal using Node.js:
 
+```bash
+
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Copy the output from this command and paste it as the value for NEXTAUTH_SECRET in your .env file.
+
+
+### 4\. Run the Development Server
+
+Once the dependencies are installed and your environment variables are set, you can start the development server from the app directory:
+```bash
+cp app
+npm run dev
+```
+
+Open [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+
+-----
+
+## Deploy on Vercel
+
+We will deploy our Next.js app using the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.

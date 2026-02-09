@@ -1,3 +1,4 @@
+/// <reference types="webpack/module.d.ts" />
 "use strict";
 const getTarget = (()=>{
     const memo = {};
@@ -41,7 +42,11 @@ module.exports = (url, options)=>{
     } else {
         const target = getTarget(options.insert || 'head');
         if (!target) {
-            throw new Error("Couldn't find a style target. This probably means that the value for the 'insert' parameter is invalid.");
+            throw Object.defineProperty(new Error("Couldn't find a style target. This probably means that the value for the 'insert' parameter is invalid."), "__NEXT_ERROR_CODE", {
+                value: "E245",
+                enumerable: false,
+                configurable: true
+            });
         }
         target.appendChild(link);
     }
