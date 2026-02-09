@@ -17,7 +17,7 @@ export async function POST(request) {
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `Suggest a single, highly relevant emoji for the following story title. Provide only the emoji character, nothing else.\nStory Title: "${storyTitle}"\nEmoji:`;
 

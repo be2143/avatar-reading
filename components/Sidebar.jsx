@@ -7,8 +7,8 @@ import Image from 'next/image';
 const navItems = [
   { imgSrc: "/overview.png", label: "Overview", path: "/dashboard" },
   { imgSrc: "/lessons.png", label: "Social Stories", path: "/dashboard/social-stories" },
-  { imgSrc: "/analysis.png", label: "AI Analysis", path: "/dashboard/ai-analysis" },
   { imgSrc: "/students.png", label: "Students", path: "/dashboard/students" },
+  { imgSrc: "/analysis.png", label: "System Insights", path: "/dashboard/ai-analysis" }
 ];
 
 export default function Sidebar() {
@@ -37,10 +37,16 @@ export default function Sidebar() {
           );
         })}
       </div>
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col items-center gap-2">
         <button
-          className="text-red-500 text-xs hover:underline"
-          onClick={() => signOut()}
+          className="px-3 py-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900 transition-colors duration-200 flex items-center gap-2 text-sm font-medium"
+          onClick={() => router.push('/dashboard/profile')}
+        >
+          Profile
+        </button>
+        <button
+          className="px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 hover:text-red-900 transition-colors duration-200 flex items-center gap-2 text-sm font-medium"
+          onClick={() => signOut({ callbackUrl: '/' })}
         >
           Logout
         </button>

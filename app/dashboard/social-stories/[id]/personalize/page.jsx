@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { BeatLoader } from 'react-spinners';
 import Image from 'next/image';
-import { BookOpen, Image as ImageIcon, Eye } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, Eye, Globe, Loader2 } from 'lucide-react';
 
 export default function PersonalizeStoryPage() {
     const { id: storyId } = useParams();
@@ -14,14 +14,25 @@ export default function PersonalizeStoryPage() {
     const [students, setStudents] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [personalizationNotes, setPersonalizationNotes] = useState('');
+    const [storyGoal, setStoryGoal] = useState('');
 
     const [personalizedText, setPersonalizedText] = useState('');
     const [visualScenes, setVisualScenes] = useState([]);
+    const [personalizedTextArabic, setPersonalizedTextArabic] = useState('');
+    const [language, setLanguage] = useState('en');
+    const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+    const [modalInstructions, setModalInstructions] = useState('');
+    const [regeneratingScene, setRegeneratingScene] = useState(null);
+    const [previewImage, setPreviewImage] = useState(null);
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     const [currentStep, setCurrentStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedScene, setSelectedScene] = useState(0);
+    const [isTranslating, setIsTranslating] = useState(false);
+    const [storyEvaluation, setStoryEvaluation] = useState(null);
+    const [isEvaluating, setIsEvaluating] = useState(false);
 
     function Stepper({ currentStep }) {
         const steps = [
@@ -116,11 +127,92 @@ export default function PersonalizeStoryPage() {
     // --- New Handler for editing personalized text ---
     const handlePersonalizedTextChange = (e) => {
         setPersonalizedText(e.target.value);
+        // Clear evaluation when text is edited (user might want to re-evaluate)
+        if (storyEvaluation) {
+            setStoryEvaluation(null);
+        }
+    };
+
+    const evaluateStoryQuality = async (storyText) => {
+        setIsEvaluating(true);
+        try {
+            const response = await fetch('/api/stories/evaluate-quality-personalized', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    storyText: storyText || personalizedText,
+                    storyTitle: originalStory?.title || 'Personalized Story',
+                    description: `Personalized for ${selectedStudent?.name || 'student'}. ${personalizationNotes || ''}`,
+                    category: originalStory?.category || 'Not specified',
+                    ageGroup: selectedStudent?.ageGroup || originalStory?.ageGroup || 'Not specified',
+                    storyLength: selectedStudent?.preferredStoryLength || originalStory?.storyLength || 'Not specified',
+                    storyGoal: storyGoal || 'Not specified',
+                    studentName: selectedStudent?.name || 'Not specified',
+                    studentAge: selectedStudent?.age || 'Not specified',
+                    diagnosis: selectedStudent?.diagnosis || 'Not specified',
+                    comprehensionLevel: selectedStudent?.comprehensionLevel || 'Not specified',
+                    preferredSentenceLength: selectedStudent?.preferredSentenceLength || 'Not specified',
+                    preferredStoryLength: selectedStudent?.preferredStoryLength || 'Not specified',
+                    learningPreferences: selectedStudent?.learningPreferences || 'Not specified',
+                    challenges: selectedStudent?.challenges || 'Not specified',
+                    additionalNotes: personalizationNotes || 'Not specified',
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setStoryEvaluation(data.evaluation);
+            } else {
+                console.warn('Failed to evaluate story quality');
+                setStoryEvaluation(null);
+            }
+        } catch (err) {
+            console.error('Error evaluating story quality:', err);
+            setStoryEvaluation(null);
+        } finally {
+            setIsEvaluating(false);
+        }
+    };
+
+    // Function to regenerate Arabic translation when English text changes
+    const regenerateArabicTranslation = async (englishText) => {
+        if (!englishText.trim()) return;
+        
+        setIsTranslating(true);
+        try {
+            const translationResponse = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: englishText,
+                    targetLanguage: 'arabic'
+                })
+            });
+
+            if (translationResponse.ok) {
+                const translationData = await translationResponse.json();
+                setPersonalizedTextArabic(translationData.translatedText);
+                console.log('✅ Arabic translation regenerated');
+            } else {
+                console.warn('⚠️ Failed to regenerate Arabic translation');
+            }
+        } catch (error) {
+            console.error('❌ Error regenerating Arabic translation:', error);
+        } finally {
+            setIsTranslating(false);
+        }
     };
 
     const handlePersonalizeText = async () => {
         if (!selectedStudent || !originalStory) {
             setError("Please select a student and ensure the original story is loaded.");
+            return;
+        }
+
+        if (!storyGoal.trim()) {
+            setError("Please enter a goal for this story before customizing the text.");
             return;
         }
 
@@ -133,6 +225,9 @@ export default function PersonalizeStoryPage() {
                 body: JSON.stringify({
                     studentId: selectedStudent._id,
                     studentName: selectedStudent.name,
+                    age: selectedStudent.age,
+                    diagnosis: selectedStudent.diagnosis,
+                    guardian: selectedStudent.guardian,
                     comprehensionLevel: selectedStudent.comprehensionLevel,
                     preferredStoryLength: selectedStudent.preferredStoryLength,
                     preferredSentenceLength: selectedStudent.preferredSentenceLength,
@@ -153,8 +248,12 @@ export default function PersonalizeStoryPage() {
             const data = await response.json();
 
             setPersonalizedText(data.scenes);
+            setPersonalizedTextArabic(data.scenesArabic || '');
 
             console.log("Received personalized text: ", data.personalizedText);
+
+            // Evaluate personalized story quality after generation
+            await evaluateStoryQuality(data.scenes);
 
             setCurrentStep(2);
         } catch (err) {
@@ -196,6 +295,9 @@ export default function PersonalizeStoryPage() {
                     personalizedStoryText: personalizedText,
                     studentId: selectedStudent._id,
                     mainCharacterName: selectedStudent.name,
+                    learningPreferences: selectedStudent.learningPreferences,
+                    challenges: selectedStudent.challenges,
+                    additionalNotes: personalizationNotes,
                 }),
             });
 
@@ -239,6 +341,42 @@ export default function PersonalizeStoryPage() {
                         setTimeout(pollProgress, 2000); // Poll every 2 seconds
                     } else {
                         console.log(`✅ Batch generation completed for ${selectedStudent.name}`);
+                        
+                        // Image generation completed - now translate to Arabic
+                        console.log('🎨 Image generation completed, translating to Arabic...');
+                        
+                        try {
+                            // Reconstruct the final English story text from the generated scenes
+                            const finalEnglishText = updatedScenes
+                                .map(scene => scene.text)
+                                .join('\n\n');
+                            
+                            console.log('🔄 Translating final English story text to Arabic...');
+                            
+                            // Translate the complete final English story text to Arabic
+                            const translationResponse = await fetch('/api/translate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    text: finalEnglishText,
+                                    targetLanguage: 'arabic'
+                                })
+                            });
+
+                            if (translationResponse.ok) {
+                                const translationData = await translationResponse.json();
+                                console.log('✅ Final English story translated to Arabic');
+                                
+                                // Update the Arabic text state
+                                setPersonalizedTextArabic(translationData.translatedText);
+                            } else {
+                                console.warn('⚠️ Arabic translation failed, proceeding without it');
+                            }
+                            
+                        } catch (translationError) {
+                            console.error('❌ Arabic translation error:', translationError);
+                        }
+                        
                         setIsLoading(false);
                         setCurrentStep(3); // Move to final preview
                     }
@@ -269,6 +407,11 @@ export default function PersonalizeStoryPage() {
             return;
         }
 
+        if (!storyGoal || !storyGoal.trim()) {
+            setError("Please enter a goal for this story.");
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
         try {
@@ -279,6 +422,7 @@ export default function PersonalizeStoryPage() {
                 title: storyTitle,
                 description: storyDescription,
                 generatedText: personalizedText,
+                generatedTextArabic: personalizedTextArabic,
                 category: originalStory?.category,
                 ageGroup: selectedStudent.ageGroup || originalStory?.ageGroup,
                 storyLength: selectedStudent.preferredStoryLength || originalStory?.storyLength,
@@ -289,6 +433,8 @@ export default function PersonalizeStoryPage() {
                 hasImages: visualScenes && visualScenes.length > 0,
                 visualScenes: visualScenes,
                 source: 'generated',
+                visibility: 'private', // Default personalized stories to private
+                goal: storyGoal.trim(), // Add goal to payload
             };
 
             const res = await fetch('/api/stories/save-personalized', {
@@ -426,147 +572,230 @@ export default function PersonalizeStoryPage() {
             ) : currentStep === 3 ? (
                 // Step 3: Review Generated Visual Story - Two-column layout with thumbnails and detailed view
                 <div className="bg-white p-8 rounded-lg shadow-md">
-                    {/* Success Banner */}
-                    <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-                        <div className="flex items-center">
-                            <span className="mr-3 text-2xl">✅</span>
-                            <span className="text-green-800 font-medium">All scenes generated successfully! Your visual social story is ready for review.</span>
-                        </div>
+                  {/* Success Banner */}
+                  <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <span className="mr-3 text-2xl">✅</span>
+                      <span className="text-green-800 font-medium">All scenes generated successfully! Your visual social story is ready for review.</span>
                     </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Left Panel: Scene Thumbnails */}
-                        <div className="lg:col-span-1">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">Scene Thumbnails</h3>
-                            <div className="space-y-4">
-                                {visualScenes.map((scene, index) => (
-                                    <div
-                                        key={scene.id || index}
-                                        className={`border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${selectedScene === index ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                        onClick={() => setSelectedScene(index)}
-                                    >
-                                        {scene.error ? (
-                                            <div className="w-full h-32 bg-red-50 flex items-center justify-center">
-                                                <div className="text-center">
-                                                    <p className="text-red-600 text-xs font-medium">Failed</p>
-                                                    <p className="text-red-500 text-xs">Scene {scene.id}</p>
-                                                </div>
-                                            </div>
-                                        ) : scene.image && scene.image !== 'https://placehold.co/400x300/e0e0e0/000000?text=Image+Failed' ? (
-                                            <Image
-                                                src={scene.image}
-                                                alt={`Scene ${scene.id || index + 1}`}
-                                                width={200}
-                                                height={150}
-                                                className="w-full h-32 object-cover"
-                                                onError={(e) => { e.target.src = "https://placehold.co/400x400.png?text=Image+Not+Available"; e.target.alt = "Image Not Available"; }}
-                                            />
-                                        ) : (
-                                            <div className="w-full h-32 bg-gray-100 flex items-center justify-center">
-                                                <div className="text-center">
-                                                    <p className="text-gray-600 text-xs font-medium">No image</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className="p-2">
-                                            <p className="text-xs font-medium text-gray-700">Scene {index + 1}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Right Panel: Detailed Scene View */}
-                        <div className="lg:col-span-2">
-                            {selectedScene !== null && visualScenes[selectedScene] ? (
-                                <div>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="text-lg font-semibold text-gray-800">Story Title</h3>
-                                        <span className="text-sm text-gray-500">Scene {selectedScene + 1}/{visualScenes.length}</span>
-                                    </div>
-
-                                    <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                            {/* Scene Text */}
-                                            <div className="lg:col-span-1">
-                                                <div className="text-gray-800 leading-relaxed">
-                                                    {visualScenes[selectedScene].text.split(' ').map((word, wordIndex) => {
-                                                        // Highlight emotional words
-                                                        const emotionalWords = ['sad', 'worried', 'happy', 'excited', 'angry', 'scared', 'nervous', 'confident'];
-                                                        const isEmotional = emotionalWords.some(emotion =>
-                                                            word.toLowerCase().includes(emotion)
-                                                        );
-                                                        return (
-                                                            <span key={wordIndex}>
-                                                                {isEmotional ? (
-                                                                    <span className="font-bold text-purple-600">{word}</span>
-                                                                ) : (
-                                                                    word
-                                                                )}
-                                                                {' '}
-                                                            </span>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            {/* Scene Image */}
-                                            <div className="lg:col-span-1">
-                                                {visualScenes[selectedScene].error ? (
-                                                    <div className="w-full h-64 bg-red-50 flex items-center justify-center rounded-lg">
-                                                        <div className="text-center">
-                                                            <p className="text-red-600 text-sm font-medium">Failed to generate</p>
-                                                            <p className="text-red-500 text-xs">Scene {visualScenes[selectedScene].id}</p>
-                                                        </div>
-                                                    </div>
-                                                ) : visualScenes[selectedScene].image && visualScenes[selectedScene].image !== 'https://placehold.co/400x300/e0e0e0/000000?text=Image+Failed' ? (
-                                                    <Image
-                                                        src={visualScenes[selectedScene].image}
-                                                        alt={`Scene ${visualScenes[selectedScene].id || selectedScene + 1}`}
-                                                        width={400}
-                                                        height={400}
-                                                        className="w-full h-auto object-cover rounded-lg"
-                                                        onError={(e) => { e.target.src = "https://placehold.co/400x400.png?text=Image+Not+Available"; e.target.alt = "Image Not Available"; }}
-                                                    />
-                                                ) : (
-                                                    <div className="w-full h-64 bg-gray-100 flex items-center justify-center rounded-lg">
-                                                        <div className="text-center">
-                                                            <p className="text-gray-600 text-sm font-medium">No image available</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
+                  </div>
+              
+                  <div className="grid lg:grid-cols-3 gap-6">
+                    {/* Left Panel: Scene Navigation */}
+                    <div className="lg:col-span-1 border-r pr-6">
+                      <h3 className="text-lg font-semibold mb-4">Scene Navigation</h3>
+                      <div className="flex flex-col gap-2">
+                        {visualScenes.map((scene, index) => (
+                          <button
+                            key={scene.id || index}
+                            onClick={() => setSelectedScene(index)}
+                                        className={`block w-full text-left p-3 rounded-lg ${selectedScene === index
+                                ? 'bg-purple-100 text-purple-800 font-semibold' 
+                                : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            Scene {index + 1}: {scene.text.substring(0, 40)}...
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+              
+                    {/* Right Panel: Detailed Scene View */}
+                    <div className="lg:col-span-2">
+                      {selectedScene !== null && visualScenes[selectedScene] ? (
+                        <div className="bg-white border rounded-lg p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold">
+                              Scene {selectedScene + 1}
+                            </h3>
+                            <span className="text-sm text-gray-500">
+                              {selectedScene + 1}/{visualScenes.length}
+                            </span>
+                          </div>
+              
+                          <div className="mb-4 relative">
+                            {visualScenes[selectedScene].error ? (
+                              <div className="w-full h-80 bg-red-50 flex items-center justify-center rounded-lg">
+                                <div className="text-center">
+                                  <p className="text-red-600 text-sm font-medium">Failed to generate</p>
+                                  <p className="text-red-500 text-xs">Scene {visualScenes[selectedScene].id}</p>
                                 </div>
+                              </div>
+                            ) : visualScenes[selectedScene].image && 
+                               visualScenes[selectedScene].image !== 'https://placehold.co/400x300/e0e0e0/000000?text=Image+Failed' ? (
+                              <Image
+                                src={visualScenes[selectedScene].image}
+                                alt={`Scene ${visualScenes[selectedScene].id || selectedScene + 1}`}
+                                width={600}
+                                height={400}
+                                className="w-full h-80 object-contain rounded-md bg-gray-100"
+                                onError={(e) => { 
+                                  e.target.src = "https://placehold.co/400x400.png?text=Image+Not+Available"; 
+                                  e.target.alt = "Image Not Available"; 
+                                }}
+                              />
                             ) : (
-                                <div className="text-center text-gray-500">
-                                    <p>Select a scene to view details</p>
+                              <div className="w-full h-80 bg-gray-100 flex items-center justify-center rounded-lg">
+                                <div className="text-center">
+                                  <p className="text-gray-600 text-sm font-medium">No image available</p>
                                 </div>
+                              </div>
                             )}
+                            
+                            {/* Regenerate Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModalInstructions('');
+                                setShowRegenerateModal(true);
+                              }}
+                              disabled={regeneratingScene === selectedScene}
+                              className="absolute top-3 right-3 inline-flex items-center gap-2 rounded-full bg-white/90 hover:bg-white text-gray-700 shadow-md hover:shadow-lg border border-gray-200 hover:border-purple-200 transition-all duration-300 ease-in-out group disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden w-10 hover:w-32 px-2 hover:px-3 h-10"
+                              title="Regenerate this scene"
+                            >
+                              {regeneratingScene === selectedScene ? (
+                                <svg
+                                  className="animate-spin h-5 w-5 text-purple-600 flex-shrink-0"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                  ></circle>
+                                  <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 00-10 10h4z"
+                                  ></path>
+                                </svg>
+                              ) : (
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 text-purple-600 group-hover:text-purple-700 flex-shrink-0 transition-colors duration-300"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M12 20h9" />
+                                  <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                                </svg>
+                              )}
+              
+                              {/* Text that appears on hover */}
+                              <span className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-75 text-sm font-medium text-purple-700">
+                                Regenerate
+                              </span>
+                            </button>
+                          </div>
+              
+                          {/* Scene Text with Language Toggle - Now Editable for Both Languages */}
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-md font-semibold text-gray-800">Scene Text</h4>
+                            </div>
+                            
+                            {/* Editable Text Areas for Both Languages */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              {/* English Scene Text */}
+                              <div>
+                                <label htmlFor="sceneTextEn" className="block text-sm font-medium text-gray-700 mb-2">Scene Text (English)</label>
+                                <textarea
+                                  id="sceneTextEn"
+                                  value={visualScenes[selectedScene].text}
+                                  onChange={async (e) => {
+                                    const updatedScenes = [...visualScenes];
+                                    updatedScenes[selectedScene] = {
+                                      ...updatedScenes[selectedScene],
+                                      text: e.target.value
+                                    };
+                                    setVisualScenes(updatedScenes);
+                                    
+                                    // Also update the main personalizedText to keep in sync
+                                    const scenesText = updatedScenes.map(scene => scene.text).join('\n\n');
+                                    setPersonalizedText(scenesText);
+                                    
+                                    // Regenerate Arabic translation for the updated text
+                                    await regenerateArabicTranslation(scenesText);
+                                  }}
+                                  rows="6"
+                                  className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
+                                ></textarea>
+                              </div>
+              
+                              {/* Arabic Scene Text */}
+                              <div>
+                                <label htmlFor="sceneTextAr" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Scene Text (Arabic)
+                                  {isTranslating && (
+                                    <span className="ml-2 text-xs text-blue-600 flex items-center">
+                                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                      Translating...
+                                    </span>
+                                  )}
+                                </label>
+                                <textarea
+                                  id="sceneTextAr"
+                                  value={(personalizedTextArabic || '').split('\n\n')[selectedScene] || ''}
+                                  onChange={(e) => {
+                                    const currentArabic = personalizedTextArabic || '';
+                                    const parts = currentArabic.split('\n\n');
+                                    
+                                    // Pad array to ensure index exists
+                                    while (parts.length <= selectedScene) parts.push('');
+                                    parts[selectedScene] = e.target.value;
+                                    
+                                    const joined = parts.join('\n\n');
+                                    setPersonalizedTextArabic(joined);
+                                  }}
+                                  rows="6"
+                                  className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
+                                  dir="rtl"
+                                ></textarea>
+                              </div>
+                            </div>
+              
+                            <div className="flex items-center bg-yellow-100 border border-orange-400 rounded-lg px-4 py-3 mt-4">
+                              <span className="mr-3 text-2xl">ℹ️</span>
+                              <span className="text-gray-700 text-base">Review and edit both English and Arabic texts so they match per scene.</span>
+                            </div>
+                          </div>
                         </div>
+                      ) : (
+                        <div className="text-center text-gray-500 py-8">
+                          <p>Select a scene to view details</p>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Save Button */}
-                    <div className="mt-8 text-center">
-                        <button
-                            onClick={handleSavePersonalizedStory}
-                            className="bg-purple-600 hover:bg-purple-700 text-white py-3 px-8 rounded-lg text-lg font-medium transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={isLoading}
-                        >
-                            {isLoading ? <BeatLoader size={8} color="#fff" /> : "Approve & Save"}
-                        </button>
-                    </div>
+                  </div>
+              
+                  {/* Save Button - Aligned to Right */}
+                  <div className="mt-8 flex justify-end">
+                    <button
+                      onClick={handleSavePersonalizedStory}
+                      className="bg-purple-600 hover:bg-purple-700 text-white py-3 px-8 rounded-lg text-lg font-medium transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? <BeatLoader size={8} color="#fff" /> : "Approve & Save"}
+                    </button>
+                  </div>
                 </div>
-            ) : (
+              ) : (
                 // Regular two-column layout for other steps
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Left Panel: Student Selection & Personalization Controls (Step 1) */}
                     <div className="bg-white p-8 rounded-lg shadow-md">
                         <h2 className="text-xl font-semibold text-gray-800 mb-4">Student Selection</h2>
                         <div className="mb-6">
-                            <label htmlFor="student-select" className="block text-gray-700 text-sm font-medium mb-2">Choose Student:</label>
+                            <label htmlFor="student-select" className="block text-gray-700 text-sm font-medium mb-2">Choose Student:<span className="text-red-500">*</span></label>
                             <select
                                 id="student-select"
                                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500"
@@ -605,6 +834,20 @@ export default function PersonalizeStoryPage() {
                             </div>
                         )}
 
+                        <div className="mb-6">
+                        <label htmlFor="student-select" className="block text-gray-700 text-sm font-medium mb-2">Enter Goal for this Story:<span className="text-red-500">*</span></label>
+                            <textarea
+                                id="story-goal"
+                                rows="3"
+                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500"
+                                value={storyGoal}
+                                onChange={(e) => setStoryGoal(e.target.value)}
+                                placeholder="e.g., 'Practice sharing toys with peers' or 'Learn to raise hand before speaking during class'"
+                                disabled={isLoading || currentStep > 1}
+                                required
+                            ></textarea>
+                        </div>
+
                         <h2 className="text-xl font-semibold text-gray-800 mb-4">Story Text Customization</h2>
                         <p className="text-gray-600 mb-4">
                             The AI will adapt the story based on the student's profile. You can add more specific notes here.
@@ -625,9 +868,15 @@ export default function PersonalizeStoryPage() {
                         <button
                             onClick={handlePersonalizeText}
                             className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-lg text-lg font-medium transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={isLoading || !selectedStudent || !originalStory || currentStep > 1}
+                            disabled={isLoading || !selectedStudent || !originalStory || !storyGoal.trim()}
                         >
-                            {isLoading && currentStep === 1 ? <BeatLoader size={8} color="#fff" /> : "Customize Text"}
+                            {isLoading && currentStep === 1 ? (
+                                <BeatLoader size={8} color="#fff" />
+                            ) : personalizedText ? (
+                                "Regenerate Text"
+                            ) : (
+                                "Customize Text"
+                            )}
                         </button>
                         {currentStep > 1 && (
                             <p className="mt-4 text-green-600 text-center">Text customized! Proceed to Step 2.</p>
@@ -636,11 +885,15 @@ export default function PersonalizeStoryPage() {
 
                     {/* Right Panel: Story Previews (Original, Customized Text, Visuals) */}
                     <div className="bg-white p-8 rounded-lg shadow-md">
-                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Original Story</h2>
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6 max-h-64 overflow-y-auto">
-                            <p className="font-semibold text-purple-700 mb-2">{originalStory?.title}</p>
-                            <p className="text-gray-700 leading-relaxed text-sm whitespace-pre-line">{originalStory?.story_content}</p>
-                        </div>
+                        {(!personalizedText && currentStep === 1) && (
+                            <>
+                                <h2 className="text-xl font-semibold text-gray-800 mb-4">Original Story</h2>
+                                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6 max-h-100 overflow-y-auto">
+                                    <p className="font-semibold text-purple-700 mb-2">{originalStory?.title}</p>
+                                    <p className="text-gray-700 leading-relaxed text-sm whitespace-pre-line">{originalStory?.story_content}</p>
+                                </div>
+                            </>
+                        )}
 
                         {/* Customized Story Text Section - Now Editable */}
                         {personalizedText && currentStep >= 2 && (
@@ -649,17 +902,153 @@ export default function PersonalizeStoryPage() {
                                     <span className="mr-3 text-2xl">ℹ️</span>
                                     <span className="text-gray-700 text-base">Please review the personalized story text before proceeding. <span className="font-medium">Click the text to edit.</span></span>
                                 </div>
-                                <h2 className="text-xl font-semibold text-gray-800 mb-4">Customized Story Text</h2>
-                                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mb-6 max-h-64 overflow-y-auto">
-                                    <p className="font-semibold text-orange-700 mb-2">Personalized for {selectedStudent?.name || 'Student'}</p>
-                                    {/* MODIFICATION HERE: Changed from <p> to <textarea> */}
+                            
+                                
+                                <div className="flex items-center justify-between mb-2">
+                                    <h2 className="text-xl font-semibold text-gray-800">Customized Story Text</h2>
+                                    <button
+                                        type="button"
+                                        onClick={() => setLanguage(prev => (prev === 'en' ? 'ar' : 'en'))}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-700 text-sm transition-colors duration-200"
+                                        aria-label={`Switch language to ${language === 'en' ? 'Arabic' : 'English'}`}
+                                    >
+                                        <Globe className="w-4 h-4 text-purple-500" />
+                                        {language === 'en' ? 'English' : 'Arabic'}
+                                    </button>
+                                </div>
+                                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-6 max-h-100 overflow-y-auto">
+                                    <p className="font-semibold text-purple-700 mb-2">Personalized for {selectedStudent?.name || 'Student'}</p>
                                     <textarea
-                                        className="w-full h-48 p-2 border border-gray-300 rounded-md focus:ring-yellow-500 focus:border-yellow-500 resize-y"
-                                        value={personalizedText}
-                                        onChange={handlePersonalizedTextChange} // New handler
-                                        rows="8" // Adjust rows as needed
-                                        disabled={isLoading || currentStep > 2} // Disable while loading or after visuals generated
+                                        className="w-full h-96 p-2 border border-gray-300 rounded-md focus:ring-yellow-500 focus:border-yellow-500 resize-y"
+                                        value={language === 'en' ? (personalizedText || '') : (personalizedTextArabic || '')}
+                                        onChange={(e) => {
+                                            if (language === 'en') {
+                                                handlePersonalizedTextChange(e);
+                                            } else {
+                                                setPersonalizedTextArabic(e.target.value);
+                                            }
+                                        }}
+                                        rows="8"
+                                        disabled={isLoading || currentStep > 2}
+                                        dir={language === 'ar' ? 'rtl' : 'ltr'}
                                     />
+                                </div>
+
+                                 {/* Story Quality Evaluation */}
+                                 {isEvaluating && (
+                                    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                                            <span className="text-blue-800 font-medium">Evaluating story quality...</span>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {storyEvaluation && !isEvaluating && (
+                                    <div className="mb-6 bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-lg font-semibold text-gray-900">Story Quality Evaluation</h3>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                                    storyEvaluation.overallScore >= 4 ? 'bg-green-100 text-green-800' :
+                                                    storyEvaluation.overallScore >= 3 ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-red-100 text-red-800'
+                                                }`}>
+                                                    Overall: {storyEvaluation.overallScore}/5
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Score Breakdown */}
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                                            {Object.entries(storyEvaluation.scores || {}).map(([key, value]) => (
+                                                <div key={key} className="bg-gray-50 rounded-lg p-3">
+                                                    <div className="text-xs text-gray-600 mb-1 capitalize">
+                                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                            <div
+                                                                className={`h-2 rounded-full ${
+                                                                    value >= 4 ? 'bg-green-500' :
+                                                                    value >= 3 ? 'bg-yellow-500' :
+                                                                    'bg-red-500'
+                                                                }`}
+                                                                style={{ width: `${(value / 5) * 100}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className="text-sm font-semibold text-gray-700">{value}/5</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        {/* Summary */}
+                                        <div className="mb-4">
+                                            <p className="text-sm text-gray-700 leading-relaxed">{storyEvaluation.summary}</p>
+                                        </div>
+                                        
+                                        {/* Strengths */}
+                                        {storyEvaluation.strengths && storyEvaluation.strengths.length > 0 && (
+                                            <div className="mb-3">
+                                                <h4 className="text-sm font-semibold text-green-700 mb-2">✓ Strengths:</h4>
+                                                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                                    {storyEvaluation.strengths.map((strength, idx) => (
+                                                        <li key={idx}>{strength}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Weaknesses */}
+                                        {storyEvaluation.weaknesses && storyEvaluation.weaknesses.length > 0 && (
+                                            <div className="mb-3">
+                                                <h4 className="text-sm font-semibold text-orange-700 mb-2">⚠ Areas for Improvement:</h4>
+                                                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                                    {storyEvaluation.weaknesses.map((weakness, idx) => (
+                                                        <li key={idx}>{weakness}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Suggestions */}
+                                        {storyEvaluation.suggestions && storyEvaluation.suggestions.length > 0 && (
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-blue-700 mb-2">💡 Suggestions:</h4>
+                                                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                                    {storyEvaluation.suggestions.map((suggestion, idx) => (
+                                                        <li key={idx}>{suggestion}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                        
+
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-3 mb-4">
+                                    <button
+                                        onClick={() => evaluateStoryQuality(personalizedText)}
+                                        disabled={isEvaluating || !personalizedText.trim()}
+                                        className="flex-1 px-4 py-2 bg-purple-200 text-purple-800 rounded-lg hover:bg-purple-300 disabled:opacity-50 flex items-center justify-center"
+                                    >
+                                        {isEvaluating ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Evaluating...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Re-evaluate Quality
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
 
                                 {/* Generate Visuals Button (Step 2 Actions) */}
@@ -694,6 +1083,127 @@ export default function PersonalizeStoryPage() {
                                 <p className="mt-2 text-gray-600">Processing...</p>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Regenerate Modal */}
+            {showRegenerateModal && selectedScene !== null && visualScenes[selectedScene] && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/50"></div>
+                    <div className="relative bg-white rounded-lg shadow-lg w-full max-w-xl mx-4 p-5">
+                        <h4 className="text-lg font-semibold mb-3">Regenerate Scene {selectedScene + 1}</h4>
+                        <div className="mb-4">
+                            <img
+                                src={visualScenes[selectedScene]?.image}
+                                alt={`Current Scene ${selectedScene + 1}`}
+                                className="w-full h-64 object-contain rounded-md bg-gray-100"
+                            />
+                        </div>
+                        <label htmlFor="modalInstructions" className="block text-sm font-medium text-gray-700 mb-1">Describe changes (optional)</label>
+                        <textarea
+                            id="modalInstructions"
+                            rows="3"
+                            value={modalInstructions}
+                            onChange={(e) => setModalInstructions(e.target.value)}
+                            className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            placeholder="e.g., Make background a sunny park and add a red ball"
+                            disabled={regeneratingScene === selectedScene}
+                        ></textarea>
+                        <div className="mt-4 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowRegenerateModal(false)}
+                                disabled={regeneratingScene === selectedScene}
+                                className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setRegeneratingScene(selectedScene);
+                                    try {
+                                        const res = await fetch('/api/stories/regenerate-scene', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                sceneText: (language === 'ar' && (personalizedTextArabic || '').split('\n\n')[selectedScene]) ? (personalizedTextArabic || '').split('\n\n')[selectedScene] : visualScenes[selectedScene].text,
+                                                // For personalize page: prefer student's image as main character reference
+                                                mainCharacterImage: selectedStudent?.cartoonImage || visualScenes[selectedScene]?.image || '',
+                                                studentImage: selectedStudent?.cartoonImage || '',
+                                                mainCharacterName: selectedStudent?.name || originalStory?.title || 'Main Character',
+                                                instructions: modalInstructions,
+                                                currentImageUrl: visualScenes[selectedScene]?.image,
+                                            }),
+                                        });
+                                        if (!res.ok) throw new Error('Failed to regenerate');
+                                        const data = await res.json();
+                                        setPreviewImage({ newImageUrl: data.imageUrl, currentImageUrl: visualScenes[selectedScene]?.image, sceneIndex: selectedScene, instructions: modalInstructions });
+                                        setShowPreviewModal(true);
+                                        setShowRegenerateModal(false);
+                                    } catch (e) {
+                                        console.error('Regenerate failed', e);
+                                    } finally {
+                                        setRegeneratingScene(null);
+                                    }
+                                }}
+                                disabled={regeneratingScene === selectedScene}
+                                className="px-4 py-2 text-sm rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                            >
+                                {regeneratingScene === selectedScene ? 'Generating Preview…' : 'Generate Preview'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Preview Modal */}
+            {showPreviewModal && previewImage && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/50"></div>
+                    <div className="relative bg-white rounded-lg shadow-lg w-full max-w-4xl mx-4 p-6">
+                        <h4 className="text-xl font-semibold mb-4">Preview New Scene</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <h5 className="text-lg font-medium mb-3 text-gray-700">Current Scene</h5>
+                                <img src={previewImage.currentImageUrl} alt="Current Scene" className="w-full h-64 object-contain rounded-md bg-gray-100 border" />
+                            </div>
+                            <div>
+                                <h5 className="text-lg font-medium mb-3 text-green-700">New Scene Preview</h5>
+                                <img src={previewImage.newImageUrl} alt="New Scene Preview" className="w-full h-64 object-contain rounded-md bg-gray-100 border border-green-300" />
+                            </div>
+                        </div>
+                        {previewImage.instructions && (
+                            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <h6 className="font-medium text-blue-900 mb-2">Applied Instructions:</h6>
+                                <p className="text-blue-800">{previewImage.instructions}</p>
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowPreviewModal(false); setPreviewImage(null); }}
+                                className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!previewImage) return;
+                                    const { newImageUrl, sceneIndex } = previewImage;
+                                    const updated = [...visualScenes];
+                                    updated[sceneIndex] = { ...updated[sceneIndex], image: newImageUrl, error: false, loading: false };
+                                    setVisualScenes(updated);
+                                    setShowPreviewModal(false);
+                                    setPreviewImage(null);
+                                }}
+                                className="px-4 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700"
+                            >
+                                Use This Scene
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

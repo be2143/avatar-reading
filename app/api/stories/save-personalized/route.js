@@ -19,12 +19,15 @@ export async function POST(request) {
       storyLength,
       specificScenarios,
       generatedText,
+      generatedTextArabic,
       visualScenes,
       mainCharacterDescription,
       otherCharacters,
       dummyStoryId,
       isPersonalized,
       student,
+      visibility,
+      goal
     } = body;
 
     if (!title || !generatedText || (isPersonalized && !student)) {
@@ -71,6 +74,7 @@ export async function POST(request) {
       storyLength,
       specificScenarios,
       story_content: generatedText,
+      story_content_arabic: generatedTextArabic,
       mainCharacterDescription,
       otherCharacters,
       visualScenes: visualScenes,
@@ -80,7 +84,9 @@ export async function POST(request) {
       isPersonalized: true,
       student: student,
       createdBy: session.user.id,
-      emoji: suggestedEmoji // Add the emoji field
+      emoji: suggestedEmoji, // Add the emoji field
+      visibility: visibility || 'private', // Add visibility field with default
+      goal: goal || null // Add goal field for personalized stories
     };
 
     if (storyRecord) {

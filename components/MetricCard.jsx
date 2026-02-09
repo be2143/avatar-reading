@@ -7,8 +7,7 @@ const MetricCard = ({ title, value, subtitle, change, changeColor = 'green' }) =
       case 'stories this month':
         return 'bg-red-100';
       case 'personalization rate':
-        return 'bg-blue-100';
-      case 'avg comprehension':
+        return 'bg-blue-100';      case 'avg. reading session time':
         return 'bg-yellow-100';
       case 'behavior success':
         return 'bg-purple-100';

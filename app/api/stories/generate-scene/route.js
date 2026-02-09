@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import sharp from 'sharp';
 import { v2 as cloudinary } from 'cloudinary';
+
+// Prevent build-time evaluation (sharp requires runtime)
+export const dynamic = 'force-dynamic';
 
 const openai = new OpenAI({
   apiKey: process.env.GPT_API_KEY,
@@ -13,46 +15,20 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Helper to process base64 image to buffer
-async function processImageForBuffer(imageBase64) {
-  let fullDataUrl = imageBase64;
-  if (!imageBase64.startsWith('data:image/')) {
-    fullDataUrl = `data:image/png;base64,${imageBase64}`;
-  }
-
+async function uploadDataUrlToCloudinary(dataUrl, filenameHint) {
   try {
-    const parts = fullDataUrl.split(',');
-    const base64Data = parts[1];
-    const imageBuffer = Buffer.from(base64Data, 'base64');
-
-    const processedImageBuffer = await sharp(imageBuffer)
-      .resize({ width: 1024, withoutEnlargement: true })
-      .toFormat('jpeg', { quality: 80 })
-      .toBuffer();
-
-    return {
-      buffer: processedImageBuffer,
-      mimeType: 'image/jpeg',
-      extension: 'jpeg',
-    };
-  } catch (error) {
-    console.error("Image processing error:", error);
-    return null;
-  }
-}
-
-// Upload to Cloudinary
-async function uploadBufferToCloudinary(buffer, filenameHint) {
-  try {
-    const base64Image = buffer.toString('base64');
-    const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${base64Image}`, {
+    const result = await cloudinary.uploader.upload(dataUrl, {
       folder: 'story_gen_images',
       public_id: `${filenameHint}_${Date.now()}`,
       resource_type: 'image',
+      transformation: [
+        { width: 1024, crop: 'limit' },
+        { fetch_format: 'jpg', quality: 'auto:good' },
+      ],
     });
     return result.secure_url;
   } catch (error) {
-    console.error("Cloudinary upload failed:", error);
+    console.error('Cloudinary upload failed:', error);
     return null;
   }
 }
@@ -60,60 +36,52 @@ async function uploadBufferToCloudinary(buffer, filenameHint) {
 // Generate individual story scene
 async function generateStoryScene(cartoonImageUrl, sceneText, mainCharacterName) {
   const promptText = (
-    `Create a colorful, friendly children's book illustration for the scene: '${sceneText}'. ` +
+    `Create a colorful, friendly children's story scene illustration for the scene: '${sceneText}'. ` +
     `The main character, ${mainCharacterName || 'a child'}, should be featured and match the cartoon style of the provided reference image. ` +
     `DO NOT include any text or captions in the image. ` +
-    `Use consistent composition and style. The image should be square format (1024x1024) with the main character prominently featured.`
+    `Use a consistent composition and style. The image should be in a square format (1024x1024) with the main character prominently featured. However, avoid having the main character simply standing still: ensure they are engaged in some kind of activity or interacting with other characters according to the scene description.`
   );
 
   try {
-    console.log(`🎨 [GENERATE-SCENE] Generating scene: "${sceneText.substring(0, 50)}..."`);
-    
     const response = await openai.responses.create({
-      model: "gpt-4o",
+      model: 'gpt-4o',
       input: [
         {
-          role: "user",
+          role: 'user',
           content: [
-            { type: "input_text", text: promptText },
-            { type: "input_image", image_url: cartoonImageUrl },
+            { type: 'input_text', text: promptText },
+            { type: 'input_image', image_url: cartoonImageUrl },
           ],
         },
       ],
-      tools: [{ type: "image_generation" }],
+      tools: [{ type: 'image_generation' }],
     });
 
     const imageGenerationOutput = response.output.find(
-      (output) => output.type === "image_generation_call"
+      (output) => output.type === 'image_generation_call'
     );
 
     if (imageGenerationOutput?.result) {
-      const dataUrl = `data:image/png;base64,${imageGenerationOutput.result}`;
-      console.log(`🎨 [GENERATE-SCENE] Scene generated successfully`);
-      
-      const processedImage = await processImageForBuffer(dataUrl);
-      if (!processedImage) {
-        console.error(`🎨 [GENERATE-SCENE] Failed to process image`);
-        return null;
-      }
-      
-      const publicUrl = await uploadBufferToCloudinary(processedImage.buffer, `scene_${Date.now()}`);
-      console.log(`🎨 [GENERATE-SCENE] Scene uploaded to Cloudinary: ${publicUrl?.substring(0, 50)}...`);
-      
+      // Ensure we pass a proper data URL to Cloudinary
+      const dataUrl = imageGenerationOutput.result.startsWith('data:image/')
+        ? imageGenerationOutput.result
+        : `data:image/png;base64,${imageGenerationOutput.result}`;
+
+      const publicUrl = await uploadDataUrlToCloudinary(dataUrl, `scene_${Date.now()}`);
+      if (!publicUrl) return null;
       return publicUrl;
-    } else {
-      console.error("🎨 [GENERATE-SCENE] No valid image result from generateStoryScene");
-      return null;
     }
+
+    return null;
   } catch (error) {
-    console.error("🎨 [GENERATE-SCENE] Error generating story scene:", error);
+    console.error('🎨 [GENERATE-SCENE] Error generating story scene:', error);
     return null;
   }
 }
 
 export async function POST(request) {
   try {
-    const { sceneText, mainCharacterImage, mainCharacterName, sceneId } = await request.json();
+    const { sceneText, mainCharacterImage, mainCharacterName } = await request.json();
 
     if (!sceneText || !mainCharacterImage || !mainCharacterName) {
       return NextResponse.json({ 
@@ -121,32 +89,14 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
-    console.log(`🎨 [GENERATE-SCENE] Starting generation for scene ${sceneId || 'unknown'}`);
-
-    // Generate the scene image
     const imageUrl = await generateStoryScene(mainCharacterImage, sceneText, mainCharacterName);
-
     if (!imageUrl) {
-      return NextResponse.json({ 
-        error: 'Failed to generate scene image.',
-        sceneId: sceneId
-      }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to generate scene image.' }, { status: 500 });
     }
 
-    console.log(`🎨 [GENERATE-SCENE] ✅ SUCCESS: Scene ${sceneId} generated successfully`);
-
-    return NextResponse.json({
-      success: true,
-      sceneId: sceneId,
-      imageUrl: imageUrl,
-      sceneText: sceneText
-    }, { status: 200 });
-
+    return NextResponse.json({ imageUrl }, { status: 200 });
   } catch (error) {
-    console.error("🎨 [GENERATE-SCENE] Fatal error:", error);
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      sceneId: request.body?.sceneId
-    }, { status: 500 });
+    console.error('Error in /api/stories/generate-scene:', error);
+    return NextResponse.json({ error: error.message || 'Failed to generate scene' }, { status: 500 });
   }
 } 

@@ -12,35 +12,28 @@ export async function POST(req) {
     const email = formData.get("email");
     const password = formData.get("password");
     const imageFile = formData.get("image"); 
-
-
-    if (!imageFile || !(imageFile instanceof File)) {
-      return NextResponse.json({ message: "Image is required." }, { status: 400 });
-    }
-
     let imageUrl = null; 
 
-    // Upload image to Cloudinary
-    try {
-      // Convert imageFile to ArrayBuffer
-      const arrayBuffer = await imageFile.arrayBuffer();
-      // Convert ArrayBuffer to Buffer
-      const buffer = Buffer.from(arrayBuffer);
-      // Convert Buffer to Base64 string for Cloudinary upload
-      const base64Image = `data:${imageFile.type};base64,${buffer.toString("base64")}`;
+    // Upload image to Cloudinary only if provided
+    if (imageFile && typeof imageFile.arrayBuffer === 'function') {
+      try {
+        const arrayBuffer = await imageFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64Image = `data:${imageFile.type};base64,${buffer.toString("base64")}`;
 
-      const uploadResult = await cloudinary.uploader.upload(base64Image, {
-        folder: "user_profiles", 
-        resource_type: "auto" // Automatically determine the resource type (image, video, raw)
-      });
-      imageUrl = uploadResult.secure_url; // Get the secure URL from Cloudinary
-      console.log("Cloudinary upload successful. Image URL:", imageUrl);
-    } catch (uploadError) {
-      console.error("Cloudinary image upload error:", uploadError);
-      return NextResponse.json(
-        { message: "Failed to upload image to Cloudinary." },
-        { status: 500 }
-      );
+        const uploadResult = await cloudinary.uploader.upload(base64Image, {
+          folder: "user_profiles",
+          resource_type: "auto"
+        });
+        imageUrl = uploadResult.secure_url;
+        console.log("Cloudinary upload successful. Image URL:", imageUrl);
+      } catch (uploadError) {
+        console.error("Cloudinary image upload error:", uploadError);
+        return NextResponse.json(
+          { message: "Failed to upload image to Cloudinary." },
+          { status: 500 }
+        );
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -62,7 +55,9 @@ export async function POST(req) {
     });
 
     console.log("Registered user ID:", user._id);
-    console.log("User saved with Cloudinary image URL:", imageUrl);
+    if (imageUrl) {
+      console.log("User saved with Cloudinary image URL:", imageUrl);
+    }
 
 
     return NextResponse.json({ message: "User registered." }, { status: 201 });

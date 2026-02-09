@@ -118,7 +118,7 @@ export default function AIRecommendations({ studentId }) {
   if (loading) {
     return (
       <div className="bg-white p-4 rounded shadow space-y-4">
-        <h2 className="font-semibold text-lg mb-1">AI Recommendations</h2>
+        <h2 className="font-semibold text-lg mb-1">Session Recommendations</h2>
         <div className="border-b border-gray-100 mb-2" />
         <div className="text-gray-400 text-sm py-6 text-center">Analyzing student data...</div>
       </div>
@@ -128,7 +128,7 @@ export default function AIRecommendations({ studentId }) {
   if (error) {
     return (
       <div className="bg-white p-4 rounded shadow space-y-4">
-        <h2 className="font-semibold text-lg mb-1">AI Recommendations</h2>
+        <h2 className="font-semibold text-lg mb-1">Session Recommendations</h2>
         <div className="border-b border-gray-100 mb-2" />
         <div className="text-red-500 text-sm py-6 text-center">{error}</div>
       </div>
@@ -137,7 +137,7 @@ export default function AIRecommendations({ studentId }) {
 
   return (
     <div className="bg-white p-4 rounded shadow space-y-4">
-      <h2 className="font-semibold text-lg mb-1">AI Recommendations</h2>
+      <h2 className="font-semibold text-lg mb-1">Session Recommendations</h2>
       <div className="border-b border-gray-100 mb-2" />
       <div className="space-y-3">
         {recommendations.length === 0 ? (
@@ -158,7 +158,15 @@ export default function AIRecommendations({ studentId }) {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-semibold text-sm">{recommendation.title}</h3>
                     </div>
-                    <p className="text-sm text-gray-700 mb-2">{recommendation.description}</p>
+                    {recommendation.bullets && Array.isArray(recommendation.bullets) ? (
+                      <ul className="text-sm text-gray-700 mb-2 space-y-1 list-disc list-inside">
+                        {recommendation.bullets.map((bullet, index) => (
+                          <li key={index} className="leading-relaxed">{bullet}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-gray-700 mb-2">{recommendation.description}</p>
+                    )}
                     {recommendation.action && recommendation.actionUrl && (
                       <div className="mt-3">
                         <a

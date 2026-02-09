@@ -1,4 +1,4 @@
-# Voxy-Social Story Teller
+# Voxy - Social Story Teller
 
 This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://www.google.com/search?q=%5Bhttps://github.com/vercel/next.js/tree/canary/packages/create-next-app%5D\(https://github.com/vercel/next.js/tree/canary/packages/create-next-app\)).
 

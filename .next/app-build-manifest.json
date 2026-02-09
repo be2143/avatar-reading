@@ -6,135 +6,77 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
-    ],
-    "/api/auth/[...nextauth]/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/auth/[...nextauth]/route.js"
-    ],
-    "/register/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/register/page.js"
-    ],
-    "/api/userExists/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/userExists/route.js"
-    ],
-    "/api/register/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/register/route.js"
-    ],
     "/dashboard/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/layout.js"
-    ],
-    "/dashboard/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/page.js"
-    ],
-    "/api/students/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/students/route.js"
-    ],
-    "/dashboard/students/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/students/page.js"
-    ],
-    "/dashboard/social-stories/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/social-stories/page.js"
-    ],
-    "/api/stories/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/route.js"
     ],
     "/dashboard/ai-analysis/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/ai-analysis/page.js"
     ],
-    "/dashboard/students/add/page": [
+    "/api/ai-analysis/metrics/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/students/add/page.js"
+      "static/chunks/app/api/ai-analysis/metrics/route.js"
     ],
-    "/api/students/[id]/stories/route": [
+    "/api/auth/[...nextauth]/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/students/[id]/stories/route.js"
+      "static/chunks/app/api/auth/[...nextauth]/route.js"
     ],
-    "/dashboard/social-stories/create/page": [
+    "/dashboard/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/social-stories/create/page.js"
+      "static/css/app/dashboard/page.css",
+      "static/chunks/app/dashboard/page.js"
     ],
-    "/api/stories/generate/route": [
+    "/api/user/me/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/generate/route.js"
+      "static/chunks/app/api/user/me/route.js"
     ],
-    "/api/stories/visuals/route": [
+    "/api/students/my-students/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/visuals/route.js"
+      "static/chunks/app/api/students/my-students/route.js"
     ],
-    "/api/stories/save/route": [
+    "/api/stories/session/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/save/route.js"
+      "static/chunks/app/api/stories/session/route.js"
     ],
-    "/dashboard/social-stories/[id]/read/page": [
+    "/api/stories/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/social-stories/[id]/read/page.js"
+      "static/chunks/app/api/stories/route.js"
     ],
-    "/api/stories/[id]/route": [
+    "/api/students/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/[id]/route.js"
+      "static/chunks/app/api/students/route.js"
     ],
-    "/dashboard/social-stories/[id]/personalize/page": [
+    "/dashboard/social-stories/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/social-stories/[id]/personalize/page.js"
+      "static/css/app/dashboard/social-stories/page.css",
+      "static/chunks/app/dashboard/social-stories/page.js"
     ],
-    "/api/personalize-text/route": [
+    "/dashboard/students/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/personalize-text/route.js"
+      "static/chunks/app/dashboard/students/page.js"
     ],
-    "/api/generate-visuals/route": [
+    "/api/ai-analysis/story-length-distribution/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/generate-visuals/route.js"
+      "static/chunks/app/api/ai-analysis/story-length-distribution/route.js"
     ],
-    "/dashboard/social-stories/upload/page": [
+    "/api/ai-analysis/story-topics/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/social-stories/upload/page.js"
-    ],
-    "/api/stories/upload/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/upload/route.js"
-    ],
-    "/api/stories/save-personalized/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/stories/save-personalized/route.js"
+      "static/chunks/app/api/ai-analysis/story-topics/route.js"
     ]
   }
 }

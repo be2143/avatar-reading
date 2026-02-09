@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, Loader2, Check, BookOpen, Image, Eye, Edit3, RefreshCw, Save } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, Check, BookOpen, Image, Eye, Edit3, RefreshCw, Save, Globe } from 'lucide-react';
 import { predefinedCharacters } from '@/lib/characters';
 import { BeatLoader } from 'react-spinners';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,15 @@ export default function CreateStoryPage() {
     const [regeneratingScene, setRegeneratingScene] = useState(null);
     const [saving, setSaving] = useState(false);
     const [storyId, setStoryId] = useState(null);
+    const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+    const [modalInstructions, setModalInstructions] = useState('');
+    const [generatedTextArabic, setGeneratedTextArabic] = useState('');
+    const [language, setLanguage] = useState('en');
+    const [previewImage, setPreviewImage] = useState(null);
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [isTranslating, setIsTranslating] = useState(false);
+    const [storyEvaluation, setStoryEvaluation] = useState(null);
+    const [isEvaluating, setIsEvaluating] = useState(false);
 
     const [formData, setFormData] = useState({
         title: '',
@@ -24,11 +33,13 @@ export default function CreateStoryPage() {
         storyLength: 'medium', // Default
         specificScenarios: '', // This will be the guidelines for text generation
         generatedText: '',
+        generatedTextArabic: '',
         visualScenes: [],
         characterName: '', // Holds the key, e.g., 'fatima'
         mainCharacterName: '', // Holds the display name, e.g., 'Fatima'
         initialCartoonBaseImageUrl: '', // Will store the selected character's base image URL
-        dummyStoryId: Date.now().toString()
+        dummyStoryId: Date.now().toString(),
+        visibility: 'private' // Default to private
     });
 
     const [showGeneratedText, setShowGeneratedText] = useState(false);
@@ -49,6 +60,28 @@ export default function CreateStoryPage() {
             setFormData(prev => ({ ...prev, mainCharacterName: '' }));
         }
     }, [formData.characterName]);
+
+    // Align Arabic paragraphs to English paragraph boundaries and scene count
+    useEffect(() => {
+        const english = formData.generatedText || '';
+        const arabic = formData.generatedTextArabic || '';
+
+        // Determine target segment count: prefer visual scenes if present, otherwise English paragraphs
+        const sceneCount = (formData.visualScenes && formData.visualScenes.length) ? formData.visualScenes.length : null;
+        const englishParts = english.split('\n\n').filter(p => p.trim() !== '');
+        const targetCount = sceneCount ?? englishParts.length;
+
+        if (targetCount === 0) return;
+
+        const arabicPartsRaw = arabic.split('\n\n');
+        const alignedArabic = Array.from({ length: targetCount }, (_, i) => arabicPartsRaw[i] ?? '');
+        const nextArabic = alignedArabic.join('\n\n');
+
+        if (nextArabic !== arabic) {
+            setFormData(prev => ({ ...prev, generatedTextArabic: nextArabic }));
+            setGeneratedTextArabic(nextArabic);
+        }
+    }, [formData.generatedText, formData.visualScenes.length]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -125,11 +158,13 @@ export default function CreateStoryPage() {
                 storyLength: formData.storyLength,
                 specificScenarios: formData.specificScenarios,
                 generatedText: formData.generatedText,
+                generatedTextArabic: formData.generatedTextArabic,
                 // Include character details
                 characterName: formData.characterName,
                 mainCharacterName: formData.mainCharacterName,
                 initialCartoonBaseImageUrl: formData.initialCartoonBaseImageUrl,
                 visualScenes: formData.visualScenes,
+                visibility: formData.visibility, // Add visibility field
                 // selectedStyle: formData.selectedStyle, // Not strictly used for DALL-E 3 consistency logic
             };
 
@@ -164,7 +199,7 @@ export default function CreateStoryPage() {
         setError('');
 
         try {
-            const response = await fetch('/api/stories/generate', {
+            const response = await fetch('/api/stories/generate-with-arabic', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -184,8 +219,18 @@ export default function CreateStoryPage() {
             }
 
             const data = await response.json();
-            setFormData(prev => ({ ...prev, generatedText: data.story }));
+            const arabicText = data.storyArabic || '';
+            setFormData(prev => ({
+                ...prev,
+                generatedText: data.story,
+                generatedTextArabic: arabicText
+            }));
+            setGeneratedTextArabic(arabicText);
             setShowGeneratedText(true);
+            setLanguage('en');
+            
+            // Evaluate story quality after generation
+            await evaluateStoryQuality(data.story);
         } catch (err) {
             setError(`Failed to generate story text: ${err.message}`);
         } finally {
@@ -197,8 +242,52 @@ export default function CreateStoryPage() {
         await generateStoryText();
     };
 
+    const evaluateStoryQuality = async (storyText) => {
+        setIsEvaluating(true);
+        try {
+            const response = await fetch('/api/stories/evaluate-quality', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    storyText: storyText || formData.generatedText,
+                    storyTitle: formData.title,
+                    description: formData.description,
+                    category: formData.category,
+                    ageGroup: formData.ageGroup,
+                    storyLength: formData.storyLength,
+                    specificScenarios: formData.specificScenarios,
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setStoryEvaluation(data.evaluation);
+            } else {
+                console.warn('Failed to evaluate story quality');
+                setStoryEvaluation(null);
+            }
+        } catch (err) {
+            console.error('Error evaluating story quality:', err);
+            setStoryEvaluation(null);
+        } finally {
+            setIsEvaluating(false);
+        }
+    };
+
     const handleTextEdit = (e) => {
         setFormData(prev => ({ ...prev, generatedText: e.target.value }));
+        // Clear evaluation when text is edited (user might want to re-evaluate)
+        if (storyEvaluation) {
+            setStoryEvaluation(null);
+        }
+    };
+
+    const handleArabicTextEdit = (e) => {
+        const value = e.target.value;
+        setFormData(prev => ({ ...prev, generatedTextArabic: value }));
+        setGeneratedTextArabic(value);
     };
 
     const generateVisualScenes = async () => {
@@ -283,11 +372,59 @@ export default function CreateStoryPage() {
                     if (!progressData.completed) {
                         setTimeout(pollProgress, 2000);
                     } else {
-                        setFormData(prev => ({
-                            ...prev,
-                            visualScenes: updatedScenes,
-                            initialCartoonBaseImageUrl: data.initialCartoonBaseImageUrl,
-                        }));
+                        // Image generation completed - now translate to Arabic
+                        console.log('🎨 Image generation completed, translating to Arabic...');
+                        
+                        try {
+                            // Reconstruct the final English story text from the generated scenes
+                            const finalEnglishText = updatedScenes
+                                .map(scene => scene.text)
+                                .join('\n\n');
+                            
+                            console.log('🔄 Translating final English story text to Arabic...');
+                            
+                            // Translate the complete final English story text to Arabic
+                            const translationResponse = await fetch('/api/translate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    text: finalEnglishText,
+                                    targetLanguage: 'arabic'
+                                })
+                            });
+
+                            if (translationResponse.ok) {
+                                const translationData = await translationResponse.json();
+                                console.log('✅ Final English story translated to Arabic');
+                                
+                                // Update form data with Arabic translation and visual scenes
+                                setFormData(prev => ({
+                                    ...prev,
+                                    visualScenes: updatedScenes,
+                                    initialCartoonBaseImageUrl: data.initialCartoonBaseImageUrl,
+                                    generatedTextArabic: translationData.translatedText
+                                }));
+                                
+                                // Update the Arabic text state as well
+                                setGeneratedTextArabic(translationData.translatedText);
+                            } else {
+                                console.warn('⚠️ Arabic translation failed, proceeding without it');
+                                setFormData(prev => ({
+                                    ...prev,
+                                    visualScenes: updatedScenes,
+                                    initialCartoonBaseImageUrl: data.initialCartoonBaseImageUrl,
+                                }));
+                            }
+                            
+                        } catch (translationError) {
+                            console.error('❌ Arabic translation error:', translationError);
+                            setFormData(prev => ({
+                                ...prev,
+                                visualScenes: updatedScenes,
+                                initialCartoonBaseImageUrl: data.initialCartoonBaseImageUrl,
+                            }));
+                        }
+                        
                         setCurrentStep(3);
                         setSelectedSceneIndex(0);
                         setError('');
@@ -308,7 +445,7 @@ export default function CreateStoryPage() {
         }
     };
 
-    const regenerateScene = async (sceneIndex) => {
+    const regenerateScene = async (sceneIndex, instructions = '', previewOnly = false) => {
         setRegeneratingScene(sceneIndex);
         setError('');
 
@@ -327,6 +464,8 @@ export default function CreateStoryPage() {
                     sceneText: sceneToRegenerate.text,
                     mainCharacterImage: formData.initialCartoonBaseImageUrl, // Use cartoon image!
                     mainCharacterName: formData.mainCharacterName,
+                    instructions,
+                    currentImageUrl: sceneToRegenerate.image,
                 }),
             });
 
@@ -336,30 +475,116 @@ export default function CreateStoryPage() {
             }
 
             const data = await response.json();
-            const updatedScenes = [...visualScenes];
-            updatedScenes[sceneIndex] = {
-                ...updatedScenes[sceneIndex],
-                image: data.imageUrl,
-                error: false,
-                loading: false,
-            };
-            setVisualScenes(updatedScenes);
-            setFormData(prev => ({ ...prev, visualScenes: updatedScenes }));
-            setError('');
+
+            if (previewOnly) {
+                // Show preview modal with the new image
+                setPreviewImage({
+                    newImageUrl: data.imageUrl,
+                    currentImageUrl: sceneToRegenerate.image,
+                    sceneIndex: sceneIndex,
+                    instructions: instructions
+                });
+                setShowPreviewModal(true);
+                setShowRegenerateModal(false);
+                return true;
+            } else {
+                // Directly update the scene (backward compatibility)
+                const updatedScenes = [...visualScenes];
+                updatedScenes[sceneIndex] = {
+                    ...updatedScenes[sceneIndex],
+                    image: data.imageUrl,
+                    error: false,
+                    loading: false,
+                };
+                setVisualScenes(updatedScenes);
+                setFormData(prev => ({ ...prev, visualScenes: updatedScenes }));
+                setError('');
+                return true;
+            }
         } catch (err) {
             setError(`Failed to regenerate scene: ${err.message}`);
+            return false;
         } finally {
             setRegeneratingScene(null);
         }
     };
 
-    const handleSceneTextEdit = (sceneIndex, newText) => {
+    const confirmPreviewImage = () => {
+        if (!previewImage) return;
+
+        const { newImageUrl, sceneIndex } = previewImage;
+        const updatedScenes = [...visualScenes];
+        updatedScenes[sceneIndex] = {
+            ...updatedScenes[sceneIndex],
+            image: newImageUrl,
+            error: false,
+            loading: false,
+        };
+        setVisualScenes(updatedScenes);
+        setFormData(prev => ({ ...prev, visualScenes: updatedScenes }));
+        setShowPreviewModal(false);
+        setPreviewImage(null);
+        setError('');
+    };
+
+    const cancelPreviewImage = () => {
+        setShowPreviewModal(false);
+        setPreviewImage(null);
+    };
+
+    const handleSceneTextEdit = async (sceneIndex, newText) => {
         const updatedScenes = [...formData.visualScenes];
         updatedScenes[sceneIndex] = {
             ...updatedScenes[sceneIndex],
             text: newText
         };
         setFormData(prev => ({ ...prev, visualScenes: updatedScenes }));
+        
+        // Regenerate Arabic translation for the updated text
+        const scenesText = updatedScenes.map(scene => scene.text).join('\n\n');
+        await regenerateArabicTranslation(scenesText);
+    };
+
+    const handleArabicSceneTextEdit = (sceneIndex, newText) => {
+        const currentArabic = formData.generatedTextArabic || '';
+        // Split without filtering to preserve alignment with scenes
+        const parts = currentArabic.split('\n\n');
+        // Pad array to ensure index exists
+        while (parts.length <= sceneIndex) parts.push('');
+        parts[sceneIndex] = newText;
+        const joined = parts.join('\n\n');
+        setFormData(prev => ({ ...prev, generatedTextArabic: joined }));
+        setGeneratedTextArabic(joined);
+    };
+
+    // Function to regenerate Arabic translation when English text changes
+    const regenerateArabicTranslation = async (englishText) => {
+        if (!englishText.trim()) return;
+        
+        setIsTranslating(true);
+        try {
+            const translationResponse = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: englishText,
+                    targetLanguage: 'arabic'
+                })
+            });
+
+            if (translationResponse.ok) {
+                const translationData = await translationResponse.json();
+                setFormData(prev => ({ ...prev, generatedTextArabic: translationData.translatedText }));
+                setGeneratedTextArabic(translationData.translatedText);
+                console.log('✅ Arabic translation regenerated');
+            } else {
+                console.warn('⚠️ Failed to regenerate Arabic translation');
+            }
+        } catch (error) {
+            console.error('❌ Error regenerating Arabic translation:', error);
+        } finally {
+            setIsTranslating(false);
+        }
     };
 
     const steps = [
@@ -432,7 +657,7 @@ export default function CreateStoryPage() {
                                     />
                                 </div>
                                 <div className="mb-4">
-                                    <label htmlFor="description" className="block text-sm font-medium text-gray-700">What is the story about? (Purpose/Situation) <span className="text-red-500">*</span></label>
+                                    <label htmlFor="description" className="block text-sm font-medium text-gray-700">What is the story about? (Target Behavior/Situation) <span className="text-red-500">*</span></label>
                                     <textarea
                                         id="description"
                                         name="description"
@@ -518,31 +743,160 @@ export default function CreateStoryPage() {
                                     <span className="mr-3 text-2xl">ℹ️</span>
                                     <span className="text-gray-700 text-base">Please review the story text before proceeding to visual generation. Click the text to edit.</span>
                                 </div>
-                                <h2 className="text-xl font-semibold mb-4">Generated Story Text</h2>
-                                <textarea
-                                    value={formData.generatedText}
-                                    onChange={handleTextEdit}
-                                    rows="15"
-                                    className="w-full border border-gray-300 rounded-md shadow-sm p-3 mb-4 resize-y focus:ring-purple-500 focus:border-purple-500"
-                                ></textarea>
-                                <div className="flex gap-4">
+                                
+                                
+                                <div className="flex items-center justify-between mb-3">
+                                    <h2 className="text-xl font-semibold">Generated Story Text</h2>
                                     <button
-                                        onClick={regenerateText}
-                                        disabled={loading}
-                                        className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50 flex items-center"
+                                        type="button"
+                                        onClick={() => setLanguage(prev => (prev === 'en' ? 'ar' : 'en'))}
+                                        disabled={!generatedTextArabic}
+                                        className={`px-3 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium ${generatedTextArabic
+                                            ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900'
+                                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                            }`}
                                     >
-                                        {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                                        Regenerate Text
-                                    </button>
-                                    <button
-                                        onClick={handleSaveStory}
-                                        disabled={saving || loading || !formData.generatedText.trim()}
-                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center"
-                                    >
-                                        {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                                        Save Text Story
+                                        <Globe className="w-4 h-4 text-purple-500" />
+                                        <span>{language === 'ar' ? 'Arabic' : 'English'}</span>
                                     </button>
                                 </div>
+                                <textarea
+                                    value={language === 'ar' ? (generatedTextArabic || '') : (formData.generatedText || '')}
+                                    onChange={language === 'ar' ? handleArabicTextEdit : handleTextEdit}
+                                    readOnly={false}
+                                    rows="15"
+                                    className={`w-full border border-gray-300 rounded-md shadow-sm p-3 mb-4 resize-y focus:ring-purple-500 focus:border-purple-500 ${language === 'ar' ? 'bg-gray-50 text-gray-800' : ''}`}
+                                    dir={language === 'ar' ? 'rtl' : 'ltr'}
+                                ></textarea>
+                                <div className="flex items-center justify-between gap-4 mb-6">
+                                    <div className="flex gap-4">
+                                        <button
+                                            onClick={regenerateText}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50 flex items-center"
+                                        >
+                                            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                                            Regenerate Text
+                                        </button>
+                                        <button
+                                            onClick={() => evaluateStoryQuality(formData.generatedText)}
+                                            disabled={isEvaluating || !formData.generatedText.trim()}
+                                            className="px-4 py-2 bg-purple-200 text-purple-800 rounded-lg hover:bg-purple-300 disabled:opacity-50 flex items-center"
+                                        >
+                                            {isEvaluating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                                            {isEvaluating ? 'Evaluating...' : 'Re-evaluate Quality'}
+                                        </button>
+                                        <button
+                                            onClick={handleSaveStory}
+                                            disabled={saving || loading || !formData.generatedText.trim()}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center"
+                                        >
+                                            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                            Save Text Story
+                                        </button>
+                                    </div>
+                                    <div className="ml-auto">
+                                        <button
+                                            onClick={() => setCurrentStep(2)}
+                                            disabled={loading || saving || !formData.generatedText.trim()}
+                                            className="flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                        >
+                                            <ArrowRight className="w-4 h-4 mr-2" />
+                                            Proceed to Visuals
+                                        </button>
+                                    </div>
+                                </div>
+                                                                {/* Story Quality Evaluation */}
+                                                                {isEvaluating && (
+                                    <div className="mt-6 mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-center gap-2">
+                                            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                                            <span className="text-blue-800 font-medium">Evaluating story quality...</span>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {storyEvaluation && !isEvaluating && (
+                                    <div className="mb-6 bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-lg font-semibold text-gray-900">Story Quality Evaluation</h3>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                                    storyEvaluation.overallScore >= 4 ? 'bg-green-100 text-green-800' :
+                                                    storyEvaluation.overallScore >= 3 ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-red-100 text-red-800'
+                                                }`}>
+                                                    Overall: {storyEvaluation.overallScore}/5
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Score Breakdown */}
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                                            {Object.entries(storyEvaluation.scores || {}).map(([key, value]) => (
+                                                <div key={key} className="bg-gray-50 rounded-lg p-3">
+                                                    <div className="text-xs text-gray-600 mb-1 capitalize">
+                                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                            <div
+                                                                className={`h-2 rounded-full ${
+                                                                    value >= 4 ? 'bg-green-500' :
+                                                                    value >= 3 ? 'bg-yellow-500' :
+                                                                    'bg-red-500'
+                                                                }`}
+                                                                style={{ width: `${(value / 5) * 100}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className="text-sm font-semibold text-gray-700">{value}/5</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        {/* Summary */}
+                                        <div className="mb-4">
+                                            <p className="text-sm text-gray-700 leading-relaxed">{storyEvaluation.summary}</p>
+                                        </div>
+                                        
+                                        {/* Strengths */}
+                                        {storyEvaluation.strengths && storyEvaluation.strengths.length > 0 && (
+                                            <div className="mb-3">
+                                                <h4 className="text-sm font-semibold text-green-700 mb-2">✓ Strengths:</h4>
+                                                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                                    {storyEvaluation.strengths.map((strength, idx) => (
+                                                        <li key={idx}>{strength}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Weaknesses */}
+                                        {storyEvaluation.weaknesses && storyEvaluation.weaknesses.length > 0 && (
+                                            <div className="mb-3">
+                                                <h4 className="text-sm font-semibold text-orange-700 mb-2">⚠ Areas for Improvement:</h4>
+                                                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                                    {storyEvaluation.weaknesses.map((weakness, idx) => (
+                                                        <li key={idx}>{weakness}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Suggestions */}
+                                        {storyEvaluation.suggestions && storyEvaluation.suggestions.length > 0 && (
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-blue-700 mb-2">💡 Suggestions:</h4>
+                                                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                                    {storyEvaluation.suggestions.map((suggestion, idx) => (
+                                                        <li key={idx}>{suggestion}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -690,7 +1044,13 @@ export default function CreateStoryPage() {
                 {/* Step 3: Review & Edit Visuals */}
                 {currentStep === 3 && (
                     <div className="bg-white p-8 rounded-lg shadow-md">
-                        <h1 className="text-2xl font-bold mb-6 text-purple-800">Review Generated Visual Storybook</h1>
+                        {/* Success Banner */}
+                        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                            <div className="flex items-center">
+                                <span className="mr-3 text-2xl">✅</span>
+                                <span className="text-green-800 font-medium">All scenes generated successfully! Your visual social story is ready for review.</span>
+                            </div>
+                        </div>
                         <div className="grid lg:grid-cols-3 gap-6">
                             <div className="lg:col-span-1 border-r pr-6">
                                 <h3 className="text-lg font-semibold mb-4">Scene Navigation</h3>
@@ -715,7 +1075,7 @@ export default function CreateStoryPage() {
                                                 Scene {selectedSceneIndex + 1}
                                             </h3>
                                         </div>
-                                        <div className="mb-4">
+                                        <div className="mb-4 relative">
                                             <img
                                                 key={formData.visualScenes[selectedSceneIndex].id} // Using id as key is better for dynamic updates
                                                 src={formData.visualScenes[selectedSceneIndex].image}
@@ -724,25 +1084,238 @@ export default function CreateStoryPage() {
                                                 onError={(e) => { e.target.src = "https://placehold.co/600x400/e0e0e0/000000?text=Image+Load+Error"; }}
                                                 loading="lazy"
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const existing = formData.visualScenes[selectedSceneIndex]?.instructions || '';
+                                                    setModalInstructions(existing);
+                                                    setShowRegenerateModal(true);
+                                                }}
+                                                disabled={regeneratingScene === selectedSceneIndex}
+                                                className="absolute top-3 right-3 inline-flex items-center gap-2 rounded-full bg-white/90 hover:bg-white text-gray-700 shadow-md hover:shadow-lg border border-gray-200 hover:border-purple-200 transition-all duration-300 ease-in-out group disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden w-10 hover:w-32 px-2 hover:px-3 h-10"
+                                                title="Regenerate this scene"
+                                            >
+                                                {regeneratingScene === selectedSceneIndex ? (
+                                                    <svg
+                                                        className="animate-spin h-5 w-5 text-purple-600 flex-shrink-0"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <circle
+                                                            className="opacity-25"
+                                                            cx="12"
+                                                            cy="12"
+                                                            r="10"
+                                                            stroke="currentColor"
+                                                            strokeWidth="4"
+                                                        ></circle>
+                                                        <path
+                                                            className="opacity-75"
+                                                            fill="currentColor"
+                                                            d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 00-10 10h4z"
+                                                        ></path>
+                                                    </svg>
+                                                ) : (
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        className="h-5 w-5 text-purple-600 group-hover:text-purple-700 flex-shrink-0 transition-colors duration-300"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    >
+                                                        <path d="M12 20h9" />
+                                                        <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                                                    </svg>
+                                                )}
+
+                                                {/* Text that appears on hover */}
+                                                <span className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-75 text-sm font-medium text-purple-700">
+                                                    Regenerate
+                                                </span>
+                                            </button>
                                         </div>
+                                        {/* <div className="mb-4">
+                                            <label htmlFor="sceneInstructions" className="block text-sm font-medium text-gray-700 mb-1">Regeneration instructions (optional)</label>
+                                            <input
+                                                id="sceneInstructions"
+                                                type="text"
+                                                value={formData.visualScenes[selectedSceneIndex]?.instructions || ''}
+                                                onChange={(e) => {
+                                                    const updatedScenes = [...formData.visualScenes];
+                                                    updatedScenes[selectedSceneIndex] = {
+                                                        ...updatedScenes[selectedSceneIndex],
+                                                        instructions: e.target.value
+                                                    };
+                                                    setFormData(prev => ({ ...prev, visualScenes: updatedScenes }));
+                                                }}
+                                                placeholder="e.g., Make the background a sunny park; add a red ball"
+                                                className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <div className="mt-2 flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => regenerateScene(selectedSceneIndex, formData.visualScenes[selectedSceneIndex]?.instructions || '')}
+                                                    disabled={regeneratingScene === selectedSceneIndex}
+                                                    className="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                                                >
+                                                    {regeneratingScene === selectedSceneIndex ? 'Regenerating…' : 'Regenerate scene'}
+                                                </button>
+                                            </div>
+                                        </div> */}
                                         <div>
-                                            <label htmlFor="sceneText" className="block text-sm font-medium text-gray-700 mb-2">Scene Text</label>
-                                            <textarea
-                                                id="sceneText"
-                                                value={formData.visualScenes[selectedSceneIndex].text}
-                                                onChange={(e) => handleSceneTextEdit(selectedSceneIndex, e.target.value)}
-                                                rows="5"
-                                                className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
-                                            ></textarea>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* English Scene Text */}
+                                                <div>
+                                                    <label htmlFor="sceneTextEn" className="block text-sm font-medium text-gray-700 mb-2">Scene Text (English)</label>
+                                                    <textarea
+                                                        id="sceneTextEn"
+                                                        value={formData.visualScenes[selectedSceneIndex].text}
+                                                        onChange={(e) => handleSceneTextEdit(selectedSceneIndex, e.target.value)}
+                                                        rows="6"
+                                                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
+                                                    ></textarea>
+                                                </div>
+
+                                                {/* Arabic Scene Text */}
+                                                <div>
+                                                    <label htmlFor="sceneTextAr" className="block text-sm font-medium text-gray-700 mb-2">
+                                                        Scene Text (Arabic)
+                                                        {isTranslating && (
+                                                            <span className="ml-2 text-xs text-blue-600 flex items-center">
+                                                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                                                Translating...
+                                                            </span>
+                                                        )}
+                                                    </label>
+                                                    <textarea
+                                                        id="sceneTextAr"
+                                                        value={(formData.generatedTextArabic || '').split('\n\n')[selectedSceneIndex] || ''}
+                                                        onChange={(e) => handleArabicSceneTextEdit(selectedSceneIndex, e.target.value)}
+                                                        rows="6"
+                                                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 resize-y focus:ring-purple-500 focus:border-purple-500"
+                                                        dir="rtl"
+                                                    ></textarea>
+                                                </div>
+                                            </div>
+
                                             <div className="flex items-center bg-yellow-100 border border-orange-400 rounded-lg px-4 py-3 mt-4">
                                                 <span className="mr-3 text-2xl">ℹ️</span>
-                                                <span className="text-gray-700 text-base">You can edit the scene text before saving. Click the text to edit.</span>
+                                                <span className="text-gray-700 text-base">Review and edit both English and Arabic texts so they match per scene.</span>
                                             </div>
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </div>
+                        {showRegenerateModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black/50"></div>
+                                <div className="relative bg-white rounded-lg shadow-lg w-full max-w-xl mx-4 p-5">
+                                    <h4 className="text-lg font-semibold mb-3">Regenerate Scene {selectedSceneIndex + 1}</h4>
+                                    <div className="mb-4">
+                                        <img
+                                            src={formData.visualScenes[selectedSceneIndex]?.image}
+                                            alt={`Current Scene ${selectedSceneIndex + 1}`}
+                                            className="w-full h-64 object-contain rounded-md bg-gray-100"
+                                        />
+                                    </div>
+                                    <label htmlFor="modalInstructions" className="block text-sm font-medium text-gray-700 mb-1">Describe changes (optional)</label>
+                                    <textarea
+                                        id="modalInstructions"
+                                        rows="3"
+                                        value={modalInstructions}
+                                        onChange={(e) => setModalInstructions(e.target.value)}
+                                        className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        placeholder="e.g., Make background a sunny park and add a red ball"
+                                        disabled={regeneratingScene === selectedSceneIndex}
+                                    ></textarea>
+                                    <div className="mt-4 flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowRegenerateModal(false)}
+                                            disabled={regeneratingScene === selectedSceneIndex}
+                                            className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                const ok = await regenerateScene(selectedSceneIndex, modalInstructions || '', true); // Preview mode
+                                                // Modal will be closed by the regenerateScene function if successful
+                                            }}
+                                            disabled={regeneratingScene === selectedSceneIndex}
+                                            className="px-4 py-2 text-sm rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                                        >
+                                            {regeneratingScene === selectedSceneIndex ? 'Generating Preview…' : 'Generate Preview'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Preview Modal */}
+                        {showPreviewModal && previewImage && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black/50"></div>
+                                <div className="relative bg-white rounded-lg shadow-lg w-full max-w-4xl mx-4 p-6">
+                                    <h4 className="text-xl font-semibold mb-4">Preview New Scene</h4>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                        {/* Current Image */}
+                                        <div>
+                                            <h5 className="text-lg font-medium mb-3 text-gray-700">Current Scene</h5>
+                                            <img
+                                                src={previewImage.currentImageUrl}
+                                                alt="Current Scene"
+                                                className="w-full h-64 object-contain rounded-md bg-gray-100 border"
+                                            />
+                                        </div>
+
+                                        {/* New Image */}
+                                        <div>
+                                            <h5 className="text-lg font-medium mb-3 text-green-700">New Scene Preview</h5>
+                                            <img
+                                                src={previewImage.newImageUrl}
+                                                alt="New Scene Preview"
+                                                className="w-full h-64 object-contain rounded-md bg-gray-100 border border-green-300"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Instructions Display */}
+                                    {previewImage.instructions && (
+                                        <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                            <h6 className="font-medium text-blue-900 mb-2">Applied Instructions:</h6>
+                                            <p className="text-blue-800">{previewImage.instructions}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Action Buttons */}
+                                    <div className="flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={cancelPreviewImage}
+                                            className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={confirmPreviewImage}
+                                            className="px-4 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700"
+                                        >
+                                            Use This Scene
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* <div className="mt-8 flex justify-end">
                             <button
                                 onClick={handleSaveStory}
@@ -757,34 +1330,36 @@ export default function CreateStoryPage() {
                 )}
 
                 {/* Navigation Buttons (Outside step-specific content) */}
-                <div className="mt-8 flex justify-between">
-                    {/* <button
+                {!(currentStep === 1 && showGeneratedText) && (
+                    <div className="mt-8 flex justify-between">
+                        {/* <button
                         onClick={handleBack}
                         className="px-6 py-3 bg-gray-300 text-gray-800 rounded-lg shadow-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 flex items-center"
                     >
                         <ArrowLeft className="w-5 h-5 mr-2" />
                         Back
                     </button> */}
-                    <button
-                        onClick={handleNext}
-                        disabled={loading || saving || (currentStep === 1 && !formData.generatedText.trim() && showGeneratedText) || (currentStep === 2 && !formData.characterName)}
-                        className="px-6 py-3 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                    >
-                        {loading && (currentStep === 1 || currentStep === 2) ? (
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        ) : currentStep === 1 && !showGeneratedText ? (
-                            <Check className="w-5 h-5 mr-2" />
-                        ) : currentStep === 3 ? (
-                            <Check className="w-5 h-5 mr-2" />
-                        ) : (
-                            <ArrowRight className="w-5 h-5 mr-2" />
-                        )}
-                        {currentStep === 1 && !showGeneratedText && 'Generate Story Text'}
-                        {currentStep === 1 && showGeneratedText && 'Proceed to Visuals'}
-                        {currentStep === 2 && 'Generate All Visuals'}
-                        {currentStep === 3 && 'Done Reviewing, Save Story'}
-                    </button>
-                </div>
+                        <button
+                            onClick={handleNext}
+                            disabled={loading || saving || (currentStep === 1 && !formData.generatedText.trim() && showGeneratedText) || (currentStep === 2 && !formData.characterName)}
+                            className="px-6 py-3 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                            {loading && (currentStep === 1 || currentStep === 2) ? (
+                                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            ) : currentStep === 1 && !showGeneratedText ? (
+                                <Check className="w-5 h-5 mr-2" />
+                            ) : currentStep === 3 ? (
+                                <Check className="w-5 h-5 mr-2" />
+                            ) : (
+                                <ArrowRight className="w-5 h-5 mr-2" />
+                            )}
+                            {currentStep === 1 && !showGeneratedText && 'Generate Story Text'}
+                            {currentStep === 1 && showGeneratedText && 'Proceed to Visuals'}
+                            {currentStep === 2 && 'Generate All Visuals'}
+                            {currentStep === 3 && 'Done Reviewing, Save Story'}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

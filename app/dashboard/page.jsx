@@ -6,7 +6,6 @@ import React, { useState, useEffect } from 'react';
 import SystemInsights from '@/components/SystemInsights';
 import RecentActivity from '@/components/RecentActivity';
 import FloatingHelp from '@/components/FloatingHelp';
-import AIRecommendations from '@/components/AIRecommendations';
 import Image from 'next/image';
 import StudentsGrid from '@/components/StudentsGrid';
 import { useRouter } from 'next/navigation';
@@ -184,7 +183,7 @@ export default function OverviewPage() {
             <AIRecommendations studentId={students[0]._id} />
           )} */}
         </div>
-        <FloatingHelp />
+        {/* <FloatingHelp /> */}
       </div>
     </div>
   );

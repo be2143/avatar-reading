@@ -132,34 +132,18 @@ const StudentProfileDashboard = () => {
 
   let avgEngagement = 'N/A';
   if (totalSessions > 0) {
-    avgEngagement = `${(totalTimeSpent / totalSessions).toFixed(1)}s/session`;
+    const avgSeconds = totalTimeSpent / totalSessions;
+    const avgMinutes = (avgSeconds / 60).toFixed(1);
+    avgEngagement = `${avgMinutes} min/session`;
   }
 
 
 
-  let avgComprehensionScore = 'N/A';
-  if (studentData.personalizedStories && studentData.personalizedStories.length > 0) {
-    const allComprehensionScores = [];
-    studentData.personalizedStories.forEach(story => {
-      if (story.sessions && story.sessions.length > 0) {
-        story.sessions.forEach(session => {
-          console.log("Raw session.comprehensionScore: ", session.comprehensionScore, typeof session.comprehensionScore);
-          const score = Number(session.comprehensionScore);
-          if (!isNaN(score)) {
-            allComprehensionScores.push(score);
-            console.log("Pushed score:", score);
-          } else {
-            console.log("Skipped invalid score:", session.comprehensionScore);
-          }
-        });
-      }
-    });
-    console.log('allComprehensionScores: ', allComprehensionScores);
-    if (allComprehensionScores.length > 0) {
-      const averageScore = allComprehensionScores.reduce((sum, score) => sum + score, 0) / allComprehensionScores.length;
-      avgComprehensionScore = `${Math.round(averageScore)}/5`;
-    }
-  }
+  // Current behavioral success score (0–10)
+  const behavioralSuccessDisplay =
+    typeof studentData.currentBehavioralScore === 'number'
+      ? `${studentData.currentBehavioralScore}/10`
+      : 'Not set';
 
   // --- Formatting functions for better display ---
   const formatComprehensionLevel = (level) => {
@@ -269,8 +253,24 @@ const StudentProfileDashboard = () => {
   // Sort by most recent session date
   recentSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // --- Display Goals and Notes ---
-  const goalsContent = studentData.goals || 'No specific goals have been set for this student.';
+  // --- Collect Goals from Personalized Stories ---
+  const storyGoals = [];
+  if (studentData.personalizedStories && studentData.personalizedStories.length > 0) {
+    studentData.personalizedStories.forEach(story => {
+      if (story.goal && story.goal.trim()) {
+        storyGoals.push({
+          storyTitle: story.title || 'Untitled Story',
+          storyId: story._id,
+          goal: story.goal.trim()
+        });
+      }
+    });
+  }
+
+  const goalsContent = storyGoals.length > 0
+    ? storyGoals.map((item, index) => `• ${item.storyTitle}: ${item.goal}`).join('\n\n')
+    : 'No goals have been set for personalized stories yet. Goals are created when you personalize a story.';
+
   const notesContent = studentData.notes || 'No general notes available for this student.';
 
   // --- Handlers for the Edit Modal ---
@@ -342,7 +342,7 @@ const StudentProfileDashboard = () => {
 
       setShowBehavioralSurveyPopup(false);
       alert('Behavioral score updated successfully!');
-      
+
       // Refresh the page to show updated data
       window.location.reload();
     } catch (err) {
@@ -391,7 +391,7 @@ const StudentProfileDashboard = () => {
               </div>
             </div>
             <div className="flex space-x-4">
-            <div className="bg-green-100 rounded-lg p-4 text-center min-w-20">
+              <div className="bg-green-100 rounded-lg p-4 text-center min-w-20">
                 <div className="text-2xl font-bold text-gray-900">{storiesCreated}</div>
                 <div className="text-sm text-gray-600">Stories Created</div>
               </div>
@@ -400,8 +400,8 @@ const StudentProfileDashboard = () => {
                 <div className="text-sm text-gray-600">Engagement</div>
               </div>
               <div className="bg-yellow-100 rounded-lg p-4 text-center min-w-20">
-                <div className="text-2xl font-bold text-gray-900">{avgComprehensionScore}</div>
-                <div className="text-sm text-gray-600">Avg. Comprehension</div>
+                <div className="text-2xl font-bold text-gray-900">{behavioralSuccessDisplay}</div>
+                <div className="text-sm text-gray-600">Behavior Success</div>
               </div>
               {/* <button
                 onClick={() => setShowBehavioralSurveyPopup(true)}
@@ -514,20 +514,43 @@ const StudentProfileDashboard = () => {
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                         Current Goals
                       </label>
-                      <p className="text-gray-700 font-medium whitespace-pre-line">{goalsContent}</p>
+                      {storyGoals.length > 0 ? (
+                        <div className="space-y-4">
+                          {storyGoals.map((item, index) => (
+                            <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4 font-medium">
+                              <p className="text-gray-700 whitespace-pre-line">{item.goal}</p>
+                              <p className="text-sm text-gray-900 mb-1">
+                                Story:{' '}
+                                {item.storyId ? (
+                                  <Link
+                                    href={`/dashboard/social-stories/${item.storyId}/read`}
+                                    className="text-purple-600 hover:text-purple-800 hover:underline"
+                                  >
+                                    {item.storyTitle}
+                                  </Link>
+                                ) : (
+                                  item.storyTitle
+                                )}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic">{goalsContent}</p>
+                      )}
                     </div>
                     <div className="bg-purple-50 p-4 rounded-lg">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-purple-800">Current Score</span>
                         <span className="text-lg font-bold text-purple-900">
-                          {studentData.currentBehavioralScore !== undefined ? `${studentData.currentBehavioralScore}/100` : 'Not set'}
+                          {studentData.currentBehavioralScore !== undefined ? `${studentData.currentBehavioralScore}/10` : 'Not set'}
                         </span>
                       </div>
                       {studentData.currentBehavioralScore !== undefined && (
                         <div className="w-full bg-purple-200 rounded-full h-3 mb-3">
                           <div
                             className="bg-purple-600 h-3 rounded-full transition-all duration-300"
-                            style={{ width: `${studentData.currentBehavioralScore}%` }}
+                            style={{ width: `${(studentData.currentBehavioralScore / 10) * 100}%` }}
                           ></div>
                         </div>
                       )}
@@ -553,15 +576,9 @@ const StudentProfileDashboard = () => {
                   <div className="space-y-6">
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Learning Preferences
+                        Learning Preferences / Interests
                       </label>
                       <p className="text-gray-700 font-medium">{studentData.learningPreferences || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        Interests
-                      </label>
-                      <p className="text-gray-700 font-medium">{studentData.interests || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -576,7 +593,7 @@ const StudentProfileDashboard = () => {
                       <p className="text-gray-700 font-medium whitespace-pre-line">{notesContent}</p>
                     </div>
                   </div>
-                )}                  
+                )}
               </div>
             </div>
 
@@ -612,6 +629,44 @@ const StudentProfileDashboard = () => {
             </div>
           </div>
           <div className="space-y-8">
+            <div className="bg-white rounded-lg shadow-sm">
+              {/* <div className="p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Progress Report</h2>
+              </div> */}
+              <div className="p-6 space-y-6">
+
+                <div>
+                  {/* <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    Behavioral Progress
+                  </label> */}
+
+                  {/* Behavioral Score History */}
+                  {studentData.behavioralScoreHistory && studentData.behavioralScoreHistory.length > 0 && (
+                    <BehavioralScoreChart behavioralScoreHistory={studentData.behavioralScoreHistory} />
+                  )}
+
+                  {(!studentData.behavioralScoreHistory || studentData.behavioralScoreHistory.length === 0) && (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg">
+                      <div className="w-16 h-16 mx-auto mb-3 bg-gray-200 rounded-full flex items-center justify-center">
+                        <BarChart3 className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <p className="text-sm text-gray-500">No behavioral scores recorded yet.</p>
+                      <p className="text-xs text-gray-400 mt-1">Click the button above to add the first score and start tracking progress.</p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <button
+                    onClick={() => setShowBehavioralSurveyPopup(true)}
+                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+                  >
+                    Update Behavioral Score
+                  </button>
+                </div>
+              </div>
+            </div>
+            <AIRecommendations studentId={studentId} />
+
             <div className="bg-white p-4 rounded shadow space-y-4">
               <h2 className="font-semibold text-lg mb-1">Recent Sessions</h2>
               <div className="border-b border-gray-100 mb-2" />
@@ -632,11 +687,6 @@ const StudentProfileDashboard = () => {
                           </div>
                           <div className="text-xs text-gray-500 truncate">
                             Session {session.sessionNum} • {formatDate(session.date)} • {session.timeSpent}s
-                            {session.comprehensionScore && (
-                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                {session.comprehensionScore}/5
-                              </span>
-                            )}
                           </div>
                         </div>
                         {session.allSessions && session.allSessions.length > 0 && (
@@ -664,11 +714,6 @@ const StudentProfileDashboard = () => {
                             <div key={sessionIndex} className="border-l-2 border-purple-200 pl-3">
                               <div className="text-xs text-gray-500 mb-1">
                                 Session {sessionData.sessionNum} • {formatDate(sessionData.date)} • {sessionData.timeSpent}s
-                                {sessionData.comprehensionScore && (
-                                  <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                    Comprehension: {sessionData.comprehensionScore}/5
-                                  </span>
-                                )}
                               </div>
                               {sessionData.notes ? (
                                 <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
@@ -688,44 +733,7 @@ const StudentProfileDashboard = () => {
                 )}
               </div>
             </div>
-            <div className="bg-white rounded-lg shadow-sm">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Progress Report</h2>
-              </div>
-              <div className="p-6 space-y-6">
-                <div>
-                  <button
-                    onClick={() => setShowBehavioralSurveyPopup(true)}
-                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
-                  >
-                    Update Behavioral Score
-                  </button>
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Behavioral Progress
-                  </label>
-                  
-                  {/* Behavioral Score History */}
-                  {studentData.behavioralScoreHistory && studentData.behavioralScoreHistory.length > 0 && (
-                    <BehavioralScoreChart behavioralScoreHistory={studentData.behavioralScoreHistory} />
-                  )}
-                  
-                  {(!studentData.behavioralScoreHistory || studentData.behavioralScoreHistory.length === 0) && (
-                    <div className="text-center py-8 bg-gray-50 rounded-lg">
-                      <div className="w-16 h-16 mx-auto mb-3 bg-gray-200 rounded-full flex items-center justify-center">
-                        <BarChart3 className="w-8 h-8 text-gray-400" />
-                      </div>
-                      <p className="text-sm text-gray-500">No behavioral scores recorded yet.</p>
-                      <p className="text-xs text-gray-400 mt-1">Click the button above to add the first score and start tracking progress.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-                      <AIRecommendations studentId={studentId} />
-
+            {/* <AIRecommendations studentId={studentId} /> */}
           </div>
         </div>
       </div>

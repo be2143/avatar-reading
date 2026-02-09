@@ -12,29 +12,48 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Purpose/topic is required.' }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `Create a children's social story with these specifications:
 
-    **Core Purpose**: 
-    ${purpose}
+    Story Purpose and Target Behavior/Situation details: ${purpose}
     
-    **Story Details**:
+    Story Details:
     - Target Age: ${ageGroup || '6-8'} years old
-    - Category: ${category || 'emotions'}
+    - Category: ${category || 'social'}
     - Word Count: Approximately ${wordCount || 200} words
     ${guidelines ? `- Special Guidelines: ${guidelines}` : ''}
 
-    **Writing Instructions**:
+    Structural and Content Criteria:
+    1. Overall Structure (Three-Parts):
+       - Introduction: A clear opening that sets the context and introduces the main character.
+       - Body: A detailed middle that explores the situation.
+       - Conclusion: A reinforcing ending that summarizes a positive outcome or feeling.
+
+    2. Context (Answering the "WH" Questions):
+       Weave answers to relevant WHERE, WHEN, WHO, WHAT, HOW, and WHY (rationale) questions throughout the story to provide complete context.
+
+    3. The Gr·eight! Formula (Social Story Ratio):
+       Adhere to the Social Story formula by ensuring that Descriptive Sentences (objective statements of fact, context, or perspective) are greater than or equal to two times the total number of Coaching Sentences (statements that gently suggest actions or responses).
+       Example: A story with 2 Coaching Sentences must have at least 4 Descriptive Sentences.
+
+    4. Voice and Perspective:
+       Maintain a patient, positive, and supportive tone.
+       CRITICAL: Use only first-person (e.g., "I," "we") and/or third-person (e.g., "he," "she," "they," "Alex," "the children") perspective.
+       NEVER use second-person statements (e.g., "you," "your," "you should").
+       Use literally accurate and concrete vocabulary.
+
+    Writing Instructions:
     1. Focus on helping children understand and cope with the specific situation
     2. Use simple, clear language appropriate for ${ageGroup || '6-8'} year olds
     3. Keep sentences short (6-10 words on average)
     4. Structure the story into 3-5 clear paragraphs (scenes)
+
     5. Include positive coping strategies and reassurance
     6. Make the story relatable and comforting
     7. Do NOT include comprehension questions or titles
 
-    **Output Format**:
+    Output Format:
     - Return ONLY the story text
     - Separate paragraphs/scenes with exactly two newlines (\\n\\n)
     - No scene labels or numbers

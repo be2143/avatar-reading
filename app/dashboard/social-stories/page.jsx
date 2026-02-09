@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, User, Upload, Sparkles, Shield, BookOpen, Filter, Search } from 'lucide-react';
+import { Plus, User, Upload, Sparkles, Shield, BookOpen, Filter, Search, Globe } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import StoriesTour from '@/components/StoriesTour';
 import { useSession } from 'next-auth/react';
@@ -12,6 +12,10 @@ export default function SocialStoriesPage() {
   const [selectedSourceFilter, setSelectedSourceFilter] = useState('');
   const [selectedStudentIdFilter, setSelectedStudentIdFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterWithVisuals, setFilterWithVisuals] = useState(false);
+  const [filterTextOnly, setFilterTextOnly] = useState(false);
+  const [privateOnly, setPrivateOnly] = useState(false);
+  const [visibilityFilter, setVisibilityFilter] = useState('all');
   const [stories, setStories] = useState([]);
   const [myStudents, setMyStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +53,9 @@ export default function SocialStoriesPage() {
         }
       }
 
+      // Always add visibility filter for security
+      params.append('visibility', visibilityFilter);
+
       const queryString = params.toString();
       if (queryString) {
         apiUrl = `${apiUrl}?${queryString}`;
@@ -71,7 +78,7 @@ export default function SocialStoriesPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, selectedStudentIdFilter, selectedSourceFilter, session, status]);
+  }, [activeTab, selectedStudentIdFilter, selectedSourceFilter, session, status, visibilityFilter, privateOnly]);
 
   const fetchMyStudents = useCallback(async () => {
     if (status === 'loading') return;
@@ -145,7 +152,17 @@ export default function SocialStoriesPage() {
 
     const matchesSource = !selectedSourceFilter || story.source === selectedSourceFilter;
 
-    return matchesCategory && matchesSearch && matchesSource;
+    const hasVisuals = Array.isArray(story.visualScenes) && story.visualScenes.length > 0;
+    const visualsFilterActive = filterWithVisuals || filterTextOnly;
+    const matchesVisuals = !visualsFilterActive
+      ? true
+      : (filterWithVisuals && hasVisuals) || (filterTextOnly && !hasVisuals);
+
+    const matchesPrivate = privateOnly 
+      ? story.visibility === 'private' && story.createdBy === session?.user?.id 
+      : true;
+
+    return matchesCategory && matchesSearch && matchesSource && matchesVisuals && matchesPrivate;
   });
 
   const getSourceInfo = (story) => {
@@ -379,6 +396,28 @@ export default function SocialStoriesPage() {
                 </div>
               </div>
             )}
+
+            {/* Visuals + Arabic Filters stacked in one column (placed after Students) */}
+            <div className="flex flex-col gap-2">
+              <label className="inline-flex items-center gap-2 text-gray-700 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  checked={filterWithVisuals}
+                  onChange={(e) => setFilterWithVisuals(e.target.checked)}
+                />
+                With visuals
+              </label>
+              <label className="inline-flex items-center gap-2 text-gray-700 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  checked={privateOnly}
+                  onChange={(e) => setPrivateOnly(e.target.checked)}
+                />
+                Private Stories
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -471,6 +510,27 @@ export default function SocialStoriesPage() {
                               {displayCategory}
                             </div>
                           )}
+                          {/* Visibility indicator */}
+                          {story.visibility && (
+                            <div className={`absolute bottom-3 right-3 px-2 py-1 rounded-full text-xs font-medium backdrop-blur-sm z-20 ${
+                              story.visibility === 'public' 
+                                ? 'bg-green-100 text-green-700 border border-green-200' 
+                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                            }`}>
+                              {story.visibility === 'public' ? (
+                                <div className="flex items-center gap-1">
+                                  Public
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                  </svg>
+                                  Private
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="p-6">
                           <h3 className="font-bold text-gray-900 mb-3 text-lg leading-tight group-hover:text-purple-600 transition-colors duration-200">
@@ -484,7 +544,7 @@ export default function SocialStoriesPage() {
                             )}
                             {story.storyLength && (
                               <span className="bg-gray-100 px-2 py-1 rounded-full">
-                                {story.storyLength}
+                                {story.storyLength.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                               </span>
                             )}
                           </div>

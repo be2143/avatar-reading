@@ -128,25 +128,36 @@ const StudentStories = ({ student }) => {
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             background-color: #fafafa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           ">
             ${scene.image ? `
-              <div style="text-align: center; margin: 15px 0;">
+              <div style="
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                width: 100%;
+                margin: 15px 0;
+              ">
                 <img src="${scene.image}" style="
-                  max-width: 100%; 
+                  max-width: 60%; 
                   height: auto; 
                   border-radius: 6px;
                   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                  display: block;
                 " />
               </div>
             ` : ''}
             <div style="
-              font-size: 16px; 
-              line-height: 1.6; 
+              font-size: 20px; 
+              line-height: 1.7; 
               color: #374151;
               text-align: justify;
+              width: 100%;
             ">${scene.text}</div>
           </div>
-        `).join('')}
+        `).join('')}t
         
         <!-- Footer -->
         <div style="
@@ -343,7 +354,7 @@ const StudentStories = ({ student }) => {
               <div className="flex-grow">
                 <h4 className="font-semibold text-gray-800 text-lg mb-1">{story.title}</h4>
                 {story.description && (
-                  <p className="text-gray-600 text-sm mb-2 line-clamp-2">{story.description}</p>
+                    <p className="text-gray-600 text-sm mb-2 line-clamp-2"><strong>Story Goal:</strong> {story.goal}</p>
                 )}
                 <div className="flex items-center space-x-4 text-sm text-gray-600">
                   {story.category && (

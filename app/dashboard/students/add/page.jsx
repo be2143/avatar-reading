@@ -210,7 +210,9 @@ export default function AddStudentPage() {
           />
         </div>
         <div>
-          <label htmlFor="comprehensionLevel" className="block text-sm font-medium text-gray-700">Comprehension Level (School Equivalent) <span className="text-red-500">*</span></label>
+          <label htmlFor="comprehensionLevel" className="block text-sm font-medium text-gray-700">
+            Story Comprehension Level <span className="text-red-500">*</span>
+          </label>
           <select
             id="comprehensionLevel"
             name="comprehensionLevel"
@@ -220,7 +222,8 @@ export default function AddStudentPage() {
             className="w-full p-2 border border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
           >
             <option value="">Select level</option>
-            <option value="prek_k">Pre-K / Kindergarten</option>
+            <option value="prek">Pre-K (Ages 3-4)</option>
+            <option value="kindergarten">Kindergarten (Ages 5-6)</option>
             <option value="early_elementary">Early Elementary (Grades 1-2)</option>
             <option value="mid_elementary">Mid Elementary (Grades 3-5)</option>
             <option value="middle_school">Middle School (Grades 6-8)</option>
@@ -263,26 +266,13 @@ export default function AddStudentPage() {
           </select>
         </div>
         <div>
-          <label htmlFor="learningPreferences" className="block text-sm font-medium text-gray-700">Learning Preferences <span className="text-red-500">*</span></label>
+          <label htmlFor="learningPreferences" className="block text-sm font-medium text-gray-700">Learning Preferences / Interests <span className="text-red-500">*</span></label>
           <textarea
             id="learningPreferences"
             name="learningPreferences"
             value={formData.learningPreferences}
             onChange={handleChange}
             placeholder="e.g., Visual aids, auditory instructions, hands-on activities"
-            rows="3"
-            required
-            className="w-full p-2 border border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="interests" className="block text-sm font-medium text-gray-700">Interests <span className="text-red-500">*</span></label>
-          <textarea
-            id="interests"
-            name="interests"
-            value={formData.interests}
-            onChange={handleChange}
-            placeholder="e.g., Animals, space, music, sports"
             rows="3"
             required
             className="w-full p-2 border border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
@@ -301,7 +291,7 @@ export default function AddStudentPage() {
             className="w-full p-2 border border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
           />
         </div>
-        <div>
+        {/* <div>
           <label htmlFor="goals" className="block text-sm font-medium text-gray-700">Goals <span className="text-red-500">*</span></label>
           <textarea
             id="goals"
@@ -313,7 +303,7 @@ export default function AddStudentPage() {
             required
             className="w-full p-2 border border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
           />
-        </div>
+        </div> */}
         <div>
           <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Additional Notes</label>
           <textarea

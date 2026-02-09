@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function UploadStoryPage() {
+  const [language, setLanguage] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [ageGroup, setAgeGroup] = useState('');
@@ -11,6 +12,7 @@ export default function UploadStoryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMyStory, setIsMyStory] = useState(true); 
   const [otherAuthorName, setOtherAuthorName] = useState(''); 
+  const [visibility, setVisibility] = useState('private'); 
 
   const router = useRouter();
 
@@ -40,12 +42,14 @@ export default function UploadStoryPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          language,
           title,
           category,
           ageGroup,
           story_content: storyContent,
           postedBy, 
-          isPersonalized: false, 
+          isPersonalized: false,
+          visibility
         }),
       });
 
@@ -85,6 +89,22 @@ export default function UploadStoryPage() {
       </button>
       <h1 className="text-2xl font-semibold text-purple-700 mb-6">Upload a New Story</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Language Select */}
+        <div>
+          <label htmlFor="language" className="block text-sm font-medium text-gray-700">Language <span className="text-red-500">*</span></label>
+          <select
+            id="language"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="mt-1 w-full border border-gray-300 rounded px-4 py-2 focus:ring-purple-500 focus:border-purple-500"
+            required
+          >
+            <option value="">Select language</option>
+            <option value="english">English</option>
+            <option value="arabic">Arabic</option>
+          </select>
+        </div>
+
         {/* Title Input */}
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title <span className="text-red-500">*</span></label>
@@ -200,6 +220,42 @@ export default function UploadStoryPage() {
           </div>
         )}
 
+        <div className="space-y-2">
+          <span className="block text-sm font-medium text-gray-700">Choose Story Visibility</span>
+          <div className="flex space-x-4">
+            <label
+              className={`flex-1 text-center py-2 px-4 rounded-md cursor-pointer transition-all duration-200 ease-in-out
+                ${visibility === 'private' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`
+              }
+            >
+              <input
+                type="radio"
+                name="visibility"
+                value="private"
+                checked={visibility === 'private'}
+                onChange={() => setVisibility('private')}
+                className="sr-only" // Visually hide the default radio button
+              />
+              Private - Only visible to me
+            </label>
+            <label
+              className={`flex-1 text-center py-2 px-4 rounded-md cursor-pointer transition-all duration-200 ease-in-out
+                ${visibility === 'public' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`
+              }
+            >
+              <input
+                type="radio"
+                name="visibility"
+                value="public"
+                checked={visibility === 'public'}
+                onChange={() => setVisibility('public')}
+                className="sr-only" // Visually hide the default radio button
+              />
+              Public - Visible to all users
+            </label>
+          </div>
+        </div>
+        
         {/* Submit Button */}
         <button
           type="submit"

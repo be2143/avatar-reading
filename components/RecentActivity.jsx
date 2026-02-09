@@ -330,7 +330,7 @@ export default function RecentActivity() {
         <div className="pt-2 text-center">
           <button 
             onClick={() => setShowAll(!showAll)}
-            className="text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium bg-transparent border-none p-0 m-0 cursor-pointer" 
+            className="text-sm text-purple-600 hover:text-purple-800 transition-colors font-medium bg-transparent border-none p-0 m-0 cursor-pointer" 
             style={{textDecoration: 'none'}}
           >
             {showAll ? 'Show less' : 'See more...'}

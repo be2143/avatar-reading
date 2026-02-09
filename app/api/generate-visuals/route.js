@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import sharp from 'sharp';
 import { v2 as cloudinary } from 'cloudinary';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const openai = new OpenAI({
   apiKey: process.env.GPT_API_KEY,
@@ -25,6 +27,7 @@ async function processImageForBuffer(imageBase64) {
     const base64Data = parts[1];
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
+    const { default: sharp } = await import('sharp');
     const processedImageBuffer = await sharp(imageBuffer)
       .resize({ width: 1024, withoutEnlargement: true })
       .toFormat('jpeg', { quality: 80 })

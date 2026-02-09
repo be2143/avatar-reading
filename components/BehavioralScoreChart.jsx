@@ -22,8 +22,10 @@ export default function BehavioralScoreChart({ behavioralScoreHistory }) {
 
   useEffect(() => {
     if (behavioralScoreHistory && behavioralScoreHistory.length > 0) {
-      // Sort by date and prepare data for the chart
-      const sortedData = behavioralScoreHistory
+      // Sort by date (newest first), take latest 5, then sort back (oldest to newest) for chart display
+      const latestScores = behavioralScoreHistory
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5)
         .sort((a, b) => new Date(a.date) - new Date(b.date))
         .map((entry, index) => ({
           session: `Session ${index + 1}`,
@@ -31,7 +33,7 @@ export default function BehavioralScoreChart({ behavioralScoreHistory }) {
           date: new Date(entry.date).toLocaleDateString(),
           fullDate: new Date(entry.date)
         }));
-      setChartData(sortedData);
+      setChartData(latestScores);
     }
   }, [behavioralScoreHistory]);
 
@@ -44,7 +46,7 @@ export default function BehavioralScoreChart({ behavioralScoreHistory }) {
     );
   }
 
-  const maxScore = Math.max(...chartData.map(d => d.score), 100);
+  const maxScore = Math.max(...chartData.map(d => d.score), 10);
   const minScore = Math.min(...chartData.map(d => d.score), 0);
   const scoreRange = maxScore - minScore || 1;
   const chartHeight = 240;
@@ -73,9 +75,9 @@ export default function BehavioralScoreChart({ behavioralScoreHistory }) {
     <div className="space-y-4" ref={containerRef}>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-800">Behavioral Score Trend</h3>
-        <div className="text-xs text-gray-500">
+        {/* <div className="text-xs text-gray-500">
           {chartData.length} score{chartData.length !== 1 ? 's' : ''} recorded
-        </div>
+        </div> */}
       </div>
       <div className="relative bg-white border border-gray-200 rounded-lg p-4">
         <svg
@@ -93,7 +95,7 @@ export default function BehavioralScoreChart({ behavioralScoreHistory }) {
           </defs>
           <rect width="100%" height="100%" fill="url(#grid)" />
           {/* Y-axis labels */}
-          {[0, 25, 50, 75, 100].map((tick) => {
+          {[0, 2, 4, 6, 8, 10].map((tick) => {
             const y = getYPosition(tick);
             return (
               <g key={tick}>
@@ -175,7 +177,7 @@ export default function BehavioralScoreChart({ behavioralScoreHistory }) {
         <div className="mt-4 text-center">
           <div className="inline-flex items-center gap-2 text-xs text-gray-600">
             <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-            <span>Behavioral Score (0-100)</span>
+            <span>Behavioral Score (0-10)</span>
           </div>
         </div>
       </div>

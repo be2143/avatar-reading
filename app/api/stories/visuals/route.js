@@ -1,7 +1,10 @@
 // app/api/stories/visuals/route.js
 import { NextResponse } from 'next/server';
 import { generateImageFromText } from '@/lib/imageGenerator';
-import { processStoryForVisuals } from '@/lib/storyProcessor'; // NEW LLM utility
+import { processStoryForVisuals } from '@/lib/storyVisuals';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {

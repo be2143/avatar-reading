@@ -2,9 +2,43 @@ import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectMongoDB } from "@/lib/mongodb";
 import Story from '@/models/story'; 
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route"; 
+import { authOptions } from "../../auth/[...nextauth]/route";
+
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const MODEL_NAME = 'gemini-2.0-flash';
+
+// Translation function
+async function translateText(text, targetLanguage) {
+  try {
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    
+    let prompt;
+    if (targetLanguage === 'arabic') {
+      prompt = `Translate the following English text to Modern Standard Arabic. Keep the meaning accurate and natural in Arabic. Maintain any formatting, line breaks, or special characters. Return only the Arabic translation without any additional text or explanations:\n\n"${text}"`;
+    } else if (targetLanguage === 'english') {
+      prompt = `Translate the following Arabic text to English. Keep the meaning accurate and natural in English. Maintain any formatting, line breaks, or special characters. Return only the English translation without any additional text or explanations:\n\n"${text}"`;
+    } else {
+      throw new Error('Invalid target language');
+    }
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const translatedText = response.text().trim();
+    
+    // Clean up any potential markdown or extra quotes
+    const cleanText = translatedText.replace(/^["']|["']$/g, '');
+    
+    console.log(`✓ Translation successful (${text.length} chars → ${cleanText.length} chars)`);
+    return cleanText;
+  } catch (error) {
+    console.error('Translation error:', error);
+    throw error;
+  }
+} 
 
 export async function POST(request) {
   try {
@@ -19,11 +53,27 @@ export async function POST(request) {
     await connectMongoDB();
 
     const body = await request.json();
-    const { title, category, ageGroup, story_content, isPersonalized, postedBy, createdBy: clientCreatedBy, ...otherBodyData } = body;
-
-    if (!title || !story_content) {
+    const { language, title, category, ageGroup, story_content, isPersonalized, postedBy, createdBy: clientCreatedBy, visibility, ...otherBodyData } = body;
+    
+    // Validate visibility field
+    if (visibility && !['private', 'public'].includes(visibility)) {
       return NextResponse.json(
-        { error: 'Title and story content are required' },
+        { error: 'Visibility must be either "private" or "public"' },
+        { status: 400 }
+      );
+    }
+
+    if (!title || !story_content || !language) {
+      return NextResponse.json(
+        { error: 'Title, story content, and language are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate language
+    if (!['english', 'arabic'].includes(language)) {
+      return NextResponse.json(
+        { error: 'Language must be either "english" or "arabic"' },
         { status: 400 }
       );
     }
@@ -48,11 +98,38 @@ export async function POST(request) {
       console.error('Error calling emoji suggestion API:', emojiError);
     }
 
-    const newStory = new Story({
+    // Translate story content based on selected language
+    let storyContentEnglish = story_content;
+    let storyContentArabic = '';
+
+    try {
+      console.log(`Translating story content from ${language}...`);
+      
+      if (language === 'english') {
+        // Story is in English, translate to Arabic
+        storyContentEnglish = story_content; // Keep original English
+        storyContentArabic = await translateText(story_content, 'arabic');
+      } else if (language === 'arabic') {
+        // Story is in Arabic, translate to English
+        storyContentArabic = story_content; // Keep original Arabic
+        storyContentEnglish = await translateText(story_content, 'english');
+      }
+      
+      console.log(`✓ Translation completed successfully`);
+    } catch (translationError) {
+      console.error('Translation failed:', translationError);
+      return NextResponse.json(
+        { error: 'Failed to translate story content' },
+        { status: 500 }
+      );
+    }
+
+    const storyData = {
       title,
       category,
       ageGroup,
-      story_content,
+      story_content: storyContentEnglish,
+      story_content_arabic: storyContentArabic,
       isPersonalized: isPersonalized || false,
       isGenerated: false,
       hasImages: false,
@@ -61,15 +138,17 @@ export async function POST(request) {
       authorName: postedBy,
       emoji: suggestedEmoji,
       ...otherBodyData, 
-      createdBy: session.user.id, 
-    });
+      createdBy: session.user.id,
+      visibility: visibility || 'private', // Set visibility AFTER spread to ensure it's not overridden
+    };
+    
+    const newStory = new Story(storyData);
 
     const savedStory = await newStory.save();
 
     return NextResponse.json(
       {
-        message: 'Story uploaded successfully',
-        // story: savedStory
+        message: 'Story uploaded successfully'
       },
       { status: 201 }
     );

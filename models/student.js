@@ -71,7 +71,7 @@ const studentSchema = new mongoose.Schema({
     type: Number, 
     default: 0,
     min: 0,
-    max: 100
+    max: 10
   },
   behavioralScoreHistory: [{
     score: { type: Number, required: true },
@@ -79,6 +79,11 @@ const studentSchema = new mongoose.Schema({
   }],
   challenge: { type: String, default: "" },
   goals: { type: String, default: "" },
+  characterImages: {
+    type: Map,
+    of: String,
+    default: () => new Map()
+  }, // Store generated character images: { "Mom": "url1", "Dad": "url2", ... }
 }, {
   timestamps: true,
 });

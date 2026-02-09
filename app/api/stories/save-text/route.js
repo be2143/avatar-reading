@@ -12,7 +12,8 @@ export async function POST(request) {
       ageGroup, 
       storyLength, 
       specificScenarios, 
-      generatedText 
+      generatedText,
+      visibility
     } = await request.json();
 
     if (!title || !generatedText) {
@@ -32,6 +33,7 @@ export async function POST(request) {
           ageGroup,
           storyLength,
           specificScenarios,
+          visibility: visibility || 'private', // Default to private
         },
         { new: true, runValidators: true }
       );
@@ -55,6 +57,7 @@ export async function POST(request) {
         isGenerated: true,
         hasImages: false,
         scenes: [],
+        visibility: visibility || 'private', // Default to private
       });
       console.log('Story text CREATED in DB with ID:', storyRecord._id);
     }

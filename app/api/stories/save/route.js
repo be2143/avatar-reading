@@ -18,13 +18,17 @@ export async function POST(request) {
       storyLength,
       specificScenarios,
       generatedText,
+      generatedTextArabic,
       visualScenes,
       mainCharacterDescription,
+      mainCharacterName,
+      initialCartoonBaseImageUrl,
       otherCharacters,
       selectedStyle,
       dummyStoryId,
       sessions,
-      createdBy
+      createdBy,
+      visibility
     } = body;
 
     if (!title || !generatedText) {
@@ -71,7 +75,10 @@ export async function POST(request) {
       storyLength,
       specificScenarios,
       story_content: generatedText,
+      story_content_arabic: generatedTextArabic,
       mainCharacterDescription,
+      mainCharacterName,
+      initialCartoonBaseImageUrl,
       otherCharacters,
       visualScenes: visualScenes, 
       selectedStyle,
@@ -80,8 +87,11 @@ export async function POST(request) {
       dummyStoryId: dummyStoryId,
       createdBy: session?.user?.id ,
       sessions: sessions,
-      emoji: suggestedEmoji // Add the emoji field
+      emoji: suggestedEmoji, // Add the emoji field
+      visibility: visibility || 'private' // Add visibility field with default
     };
+
+    console.log('storyData', storyData);
 
     if (storyRecord) {
       Object.assign(storyRecord, storyData);

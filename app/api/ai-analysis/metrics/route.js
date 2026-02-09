@@ -5,6 +5,7 @@ import { authOptions } from "../../auth/[...nextauth]/route";
 import Story from "@/models/story";
 import Student from "@/models/student";
 import User from "@/models/user";
+import { calculateAverageSessionTime } from "@/lib/aiAnalysisUtils";
 
 export async function GET(req) {
   try {
@@ -129,54 +130,19 @@ async function calculateMetrics(userId, userStudentIds) {
 
   const libraryStories = totalStories - personalizedStories;
 
-  // 3. Average Comprehension
-  const storiesWithSessions = await Story.find({ createdBy: userId }).lean();
+  // 3. Average Reading Session Time (using shared utility function)
+  const { avgSessionMinutes } = await calculateAverageSessionTime(userId);
 
-  console.log('storiesWithSessions', storiesWithSessions);
-
-  let totalComprehension = 0;
-  let sessionCount = 0;
-
-  storiesWithSessions.forEach(story => {
-    if (story.sessions && Array.isArray(story.sessions)) {
-      console.log('story.sessions:', story.sessions);
-      story.sessions.forEach(session => {
-        console.log('session.comprehensionScore:', session.comprehensionScore);
-        totalComprehension += parseInt(session.comprehensionScore);
-        sessionCount++;
-      });
-    }
-  });
-
-  console.log('Final totalComprehension:', totalComprehension);
-  console.log('sessionCount:', sessionCount);
-
-  const avgComprehension = sessionCount > 0
-    ? Math.round(totalComprehension / sessionCount)
-    : 0;
-
-  // 4. Behavior Success Rate
+  // 4. Behavior Success — average current behavioral score (0–10) across students
   const students = await Student.find({ userId }).lean();
-  let allBehaviorScores = [];
-  students.forEach(student => {
-    if (Array.isArray(student.behavioralScoreHistory)) {
-      allBehaviorScores = allBehaviorScores.concat(student.behavioralScoreHistory.map(entry => entry.score));
-    }
-    if (
-      typeof student.currentBehavioralScore === 'number' &&
-      (!student.behavioralScoreHistory || !student.behavioralScoreHistory.some(entry => entry.score === student.currentBehavioralScore))
-    ) {
-      allBehaviorScores.push(student.currentBehavioralScore);
-    }
-  });
+  const currentScores = students
+    .map((s) => (typeof s.currentBehavioralScore === 'number' ? s.currentBehavioralScore : null))
+    .filter((score) => typeof score === 'number' && !isNaN(score));
 
-  const successThreshold = 60;
-  const successfulScores = allBehaviorScores.filter(score => score >= successThreshold).length;
-  const behaviorSuccessRate = allBehaviorScores.length > 0
-    ? Math.round((successfulScores / allBehaviorScores.length) * 100)
-    : 0;
-
-  const improvementRate = Math.min(behaviorSuccessRate, 100);
+  const avgBehaviorScore =
+    currentScores.length > 0
+      ? currentScores.reduce((sum, score) => sum + score, 0) / currentScores.length
+      : 0;
 
   return [
     {
@@ -194,19 +160,27 @@ async function calculateMetrics(userId, userStudentIds) {
       changeColor: personalizationRate > 40 ? 'green' : 'yellow'
     },
     {
-      title: 'Avg Comprehension',
-      value: `${avgComprehension}/5`,
-      subtitle: 'Comprehension Score',
-      change: avgComprehension > 3 ? 'Excellent comprehension' :
-        avgComprehension > 2 ? 'Good comprehension' : 'Needs improvement',
-      changeColor: avgComprehension >= 3 ? 'green' : avgComprehension > 2 ? 'yellow' : 'red'
+      title: 'Avg. Reading Session Time',
+      value: `${avgSessionMinutes.toFixed(1)} min`,
+      subtitle: 'per story',
+      change: avgSessionMinutes > 2
+        ? 'Strong engagement'
+        : avgSessionMinutes > 0.5
+          ? 'Moderate engagement'
+          : 'Limited engagement',
+      changeColor: avgSessionMinutes > 2 ? 'green' : avgSessionMinutes > 0.5 ? 'yellow' : 'red'
     },
     {
       title: 'Behavior Success',
-      value: `${behaviorSuccessRate}%`,
-      subtitle: 'Target behavior observed',
-      change: `${improvementRate}% show improvement`,
-      changeColor: behaviorSuccessRate > 50 ? 'green' : behaviorSuccessRate > 40 ? 'yellow' : 'red'
+      value: `${avgBehaviorScore.toFixed(1)}/10`,
+      subtitle: 'Avg behavioral score',
+      change:
+        avgBehaviorScore >= 7
+          ? 'Strong behavioral progress'
+          : avgBehaviorScore >= 4
+            ? 'Moderate progress'
+            : 'Needs support',
+      changeColor: avgBehaviorScore >= 7 ? 'green' : avgBehaviorScore >= 4 ? 'yellow' : 'red'
     }
   ];
 }

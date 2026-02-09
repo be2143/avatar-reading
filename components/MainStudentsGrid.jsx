@@ -110,21 +110,29 @@ const MainStudentsGrid = ({ onStudentSelect, selectedStudentId }) => {
             }`}
             onClick={() => handleStudentClick(student)}
           >
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-200 ${
-              selectedStudentId === student._id
-                ? 'border-3 border-purple-500 bg-purple-50'
-                : 'border-2 border-purple-200 bg-purple-50 hover:border-purple-300'
-            }`}>
-              {student.image ? (
-                <img
-                  src={student.image}
-                  alt={student.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-lg font-bold text-purple-600">
-                  {student.name?.charAt(0).toUpperCase() || '?'}
-                </span>
+            <div className="relative">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-200 ${
+                selectedStudentId === student._id
+                  ? 'border-3 border-purple-500 bg-purple-50'
+                  : 'border-2 border-purple-200 bg-purple-50 hover:border-purple-300'
+              }`}>
+                {student.image ? (
+                  <img
+                    src={student.image}
+                    alt={student.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-lg font-bold text-purple-600">
+                    {student.name?.charAt(0).toUpperCase() || '?'}
+                  </span>
+                )}
+              </div>
+              {/* Green circle indicator for students ready for personalized stories */}
+              {student.cartoonImage && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
               )}
             </div>
             <div className="text-xs text-center">

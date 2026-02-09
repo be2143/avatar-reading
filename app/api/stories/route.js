@@ -14,12 +14,42 @@ export async function GET(req) {
     const type = searchParams.get('type');
     const studentId = searchParams.get('studentId');
     const createdBy = searchParams.get('createdBy');
+    const visibility = searchParams.get('visibility');
 
     // console.log(`--- API CALL: GET /api/stories ---`);
     // console.log(`Query Params: type=${type}, studentId=${studentId}`);
 
     let query = {};
 
+    // Handle visibility filtering - ALWAYS apply visibility rules for security
+    const session = await getServerSession(authOptions);
+    
+    if (visibility === 'public') {
+      // Only show public stories
+      query.visibility = 'public';
+    } else if (visibility === 'private') {
+      // Only show private stories (user's own stories)
+      if (!session || !session.user || !session.user.id) {
+        return NextResponse.json({ message: "Authentication required to view private stories." }, { status: 401 });
+      }
+      query.visibility = 'private';
+      query.createdBy = session.user.id;
+    } else {
+      // Default behavior: Show both public stories and user's private stories
+      // This ensures users never see other users' private stories
+      if (!session || !session.user || !session.user.id) {
+        // If not authenticated, only show public stories
+        query.visibility = 'public';
+      } else {
+        // Show both public stories and user's private stories
+        query.$or = [
+          { visibility: 'public' },
+          { visibility: 'private', createdBy: session.user.id }
+        ];
+      }
+    }
+
+    // Handle type-specific filtering
     if (createdBy) {
       query.createdBy = createdBy;
     } else if (type === 'general') {
@@ -94,15 +124,30 @@ export async function GET(req) {
       const userStudentIds = user.students || [];
       
       // Query for both personalized stories (for user's students) and general stories
-      query.$or = [
-        { isPersonalized: true, student: { $in: userStudentIds } },
-        { isPersonalized: false, student: null }
-      ];
+      const typeQuery = {
+        $or: [
+          { isPersonalized: true, student: { $in: userStudentIds } },
+          { isPersonalized: false, student: null }
+        ]
+      };
+      
+      // Combine with visibility query if it exists
+      if (query.$or) {
+        query.$and = [
+          typeQuery,
+          { $or: query.$or }
+        ];
+        delete query.$or;
+      } else {
+        query = { ...query, ...typeQuery };
+      }
     } else {
       // console.log('No valid "type" parameter provided. Defaulting to General Stories.');
       query.isPersonalized = false;
       query.student = null;
     }
+
+    // Visibility filtering is already applied above
 
     // console.log('Final MongoDB Query for Story.find:', query);
     const stories = await Story.find(query).populate('student', 'name age').lean();

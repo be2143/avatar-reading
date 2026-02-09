@@ -1,11 +1,15 @@
 {
+  "/api/ai-analysis/metrics/route": "app/api/ai-analysis/metrics/route.js",
   "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/api/stories/save-personalized/route": "app/api/stories/save-personalized/route.js",
+  "/api/students/my-students/route": "app/api/students/my-students/route.js",
+  "/api/user/me/route": "app/api/user/me/route.js",
   "/api/stories/route": "app/api/stories/route.js",
-  "/api/stories/[id]/route": "app/api/stories/[id]/route.js",
-  "/dashboard/social-stories/create/page": "app/dashboard/social-stories/create/page.js",
-  "/dashboard/social-stories/page": "app/dashboard/social-stories/page.js",
-  "/dashboard/social-stories/[id]/personalize/page": "app/dashboard/social-stories/[id]/personalize/page.js",
-  "/dashboard/social-stories/[id]/read/page": "app/dashboard/social-stories/[id]/read/page.js",
-  "/dashboard/social-stories/upload/page": "app/dashboard/social-stories/upload/page.js"
+  "/api/stories/session/route": "app/api/stories/session/route.js",
+  "/api/students/route": "app/api/students/route.js",
+  "/api/ai-analysis/story-length-distribution/route": "app/api/ai-analysis/story-length-distribution/route.js",
+  "/api/ai-analysis/story-topics/route": "app/api/ai-analysis/story-topics/route.js",
+  "/dashboard/ai-analysis/page": "app/dashboard/ai-analysis/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/students/page": "app/dashboard/students/page.js",
+  "/dashboard/social-stories/page": "app/dashboard/social-stories/page.js"
 }

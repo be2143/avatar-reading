@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST="{\"components/StudentStories.jsx -> html2pdf.js\":{\"id\":\"components/StudentStories.jsx -> html2pdf.js\",\"files\":[\"static/chunks/_app-pages-browser_node_modules_html2pdf_js_dist_html2pdf_js.js\"]}}"

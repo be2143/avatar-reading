@@ -1,11 +1,52 @@
 // app/api/personalize-text/route.js
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.GPT_API_KEY,
 });
+
+// Initialize Gemini for Arabic translation
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const GEMINI_MODEL = 'gemini-2.0-flash';
+
+async function translateWithOpenAI(text) {
+  try {
+    const systemInstruction = 'You are a professional translator. Translate English children\'s story text to Modern Standard Arabic. Preserve meaning and paragraph breaks. Return only the Arabic translation without commentary.';
+    const userPrompt = `Translate to Modern Standard Arabic (MSA):\n\n"""${text}"""`;
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_TRANSLATE_MODEL || 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: Math.min(2048, Math.floor(text.length * 2) + 200),
+    });
+    return (completion.choices?.[0]?.message?.content || '').trim();
+  } catch (err) {
+    console.error('OpenAI translation failed:', err);
+    return '';
+  }
+}
+
+async function translateToArabic(text) {
+  try {
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const prompt = `Translate the following English children's story text to Modern Standard Arabic. Preserve meaning and formatting (paragraph breaks). Return only the Arabic translation without any extra commentary.\n\n"""${text}"""`;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const translated = response.text().trim().replace(/^( ["'`] )|( ["'`] )$/g, '');
+    return translated;
+  } catch (e) {
+    console.error('Translation to Arabic failed:', e);
+    // Fallback to OpenAI on 429 rate limit or any failure
+    const fallback = await translateWithOpenAI(text);
+    return fallback;
+  }
+}
 
 export async function POST(request) {
   try {
@@ -14,11 +55,13 @@ export async function POST(request) {
 
     const {
       studentName,
+      age,
+      diagnosis,
+      guardian,
       comprehensionLevel,
       preferredStoryLength,
       preferredSentenceLength,
       learningPreferences,
-      interests,
       challenges,
       originalStoryText,
       originalStoryTitle,
@@ -39,11 +82,13 @@ export async function POST(request) {
     const userPrompt = `Rewrite the following story to be personalized for a student using ONLY their first name: "${firstName}".
 
     Student Profile:
-    - Student's First Name: "${firstName}"
+    - Student's Name: "${studentName || firstName}"
+    - Age: ${age || 'not specified'}
+    - Diagnosis: ${diagnosis || 'not specified'}
     - Comprehension Level: ${comprehensionLevel || 'not specified'}
-    - Preferred Sentence Length: ${preferredSentenceLength || 'not specified'}
     - Preferred Story Length: ${preferredStoryLength || 'not specified'}
-    - Learning Preferences: ${learningPreferences || 'not specified'}
+    - Preferred Sentence Length: ${preferredSentenceLength || 'not specified'}
+    - Learning Preferences: ${learningPreferences || 'not specified'} 
     - Challenges: ${challenges || 'not specified'}
     ${additionalNotes ? `- Additional Notes: ${additionalNotes}` : ''}
 
@@ -53,6 +98,8 @@ export async function POST(request) {
 
     Instructions for rewrite:
     - Integrate ONLY the student's first name "${firstName}" naturally into the story.
+    - Consider the student's age (${age || 'not specified'}) when choosing appropriate vocabulary and concepts.
+    - Take into account the student's diagnosis (${diagnosis || 'not specified'}) to ensure the story is appropriate and supportive.
     - Adjust vocabulary and sentence structure to fit comprehension level: ${comprehensionLevel || 'general children\'s'}.
     - Keep sentence lengths within: ${preferredSentenceLength || 'general'} where:
       - very_short: Very Short (1–5 words)
@@ -64,8 +111,9 @@ export async function POST(request) {
       - short: Short (1–2 paragraphs)
       - medium: Medium (3–5 paragraphs)
       - long: Long (More than 5 paragraphs)
-    - Incorporate interests and learning preferences naturally.
-    - Gently address challenges, if relevant.
+    - Incorporate learning preferences (${learningPreferences || 'not specified'}) naturally into the story structure and presentation.
+    - Gently address challenges (${challenges || 'not specified'}), if relevant to the story.
+    - Adhere to the additional notes and adjust accordingly: ${additionalNotes || 'none provided'}.
     - Take the ${comprehensionLevel} into account when rewriting the story.
     - Maintain core plot, moral, and positivity.`;
 
@@ -123,9 +171,28 @@ export async function POST(request) {
 
     const scenes = sceneCompletion.choices[0].message.content;
 
-    console.log("Sending the scenes text: ", scenes);
+    // Arabic translation – scene-aligned for better matching
+    const sceneParts = (scenes || '').split('\n\n').filter(p => p.trim() !== '');
+    let scenesArabic = '';
+    let personalizedTextArabic = '';
+    if (sceneParts.length > 0) {
+      const arabicScenePromises = sceneParts.map(part => translateToArabic(part));
+      const arabicSceneResults = await Promise.all(arabicScenePromises);
+      scenesArabic = arabicSceneResults.join('\n\n');
+      // Build full Arabic by translating entire personalizedText or joining parts
+      // Prefer translating the full story to preserve flow
+      personalizedTextArabic = await translateToArabic(personalizedText);
+      if (!personalizedTextArabic) {
+        personalizedTextArabic = scenesArabic; // fallback
+      }
+    } else {
+      // If scenes split is empty, translate the whole text once
+      personalizedTextArabic = await translateToArabic(personalizedText);
+      scenesArabic = personalizedTextArabic;
+    }
 
-    return NextResponse.json({ personalizedText, scenes }, { status: 200 });
+    console.log("Sending the scenes text (EN): ", scenes);
+    return NextResponse.json({ personalizedText, scenes, personalizedTextArabic, scenesArabic }, { status: 200 });
 
   } catch (error) {
     console.error('API: personalize-text - Error:', error);

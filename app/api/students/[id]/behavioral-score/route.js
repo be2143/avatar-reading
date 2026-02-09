@@ -16,9 +16,9 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: "New score is required" }, { status: 400 });
     }
 
-    // Validate score range (0-100)
-    if (newScore < 0 || newScore > 100) {
-      return NextResponse.json({ error: "Score must be between 0 and 100" }, { status: 400 });
+    // Validate score range (0-10)
+    if (newScore < 0 || newScore > 10) {
+      return NextResponse.json({ error: "Score must be between 0 and 10" }, { status: 400 });
     }
 
     await connectMongoDB();

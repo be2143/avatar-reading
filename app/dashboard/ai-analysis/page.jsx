@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import MetricCard from '@/components/MetricCard';
-import ComprehensionChart from '@/components/ComprehensionChart';
+// import ComprehensionChart from '@/components/ComprehensionChart';
 import StoryLengthChart from '@/components/StoryLengthChart';
 import StoryTopics from '@/components/StoryTopics';
-import FeatureUsage from '@/components/FeatureUsage';
+// import FeatureUsage from '@/components/FeatureUsage';
 
 export default function AIAnalysisPage() {
   const [metrics, setMetrics] = useState([]);
@@ -54,9 +54,9 @@ export default function AIAnalysisPage() {
       changeColor: 'gray'
     },
     {
-      title: 'Avg Comprehension',
-      value: '0/5',
-      subtitle: 'Comprehension Score',
+      title: 'Avg. Reading Session Time',
+      value: '0.0 min',
+      subtitle: 'per story',
       change: 'No data',
       changeColor: 'gray'
     },
@@ -124,12 +124,12 @@ export default function AIAnalysisPage() {
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <ComprehensionChart />
           <StoryLengthChart />
+          <StoryTopics />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <StoryTopics />
-          <FeatureUsage />
+          {/* <ComprehensionChart /> */}
+          {/* <FeatureUsage /> */}
         </div>
       </div>
     </div>

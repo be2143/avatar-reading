@@ -25,17 +25,14 @@ export async function POST(request, context) {
           { status: 400 }
         );
     }
-    if (typeof comprehensionScore === 'undefined' || comprehensionScore === null) {
-        return NextResponse.json(
-          { error: 'Comprehension score is required for saving a session.' },
-          { status: 400 }
-        );
-    }
-    if (typeof comprehensionScore !== 'number' || comprehensionScore < 1 || comprehensionScore > 5) {
-        return NextResponse.json(
-          { error: 'Comprehension score must be a number between 1 and 5.' },
-          { status: 400 }
-        );
+    // Comprehension score is optional
+    if (comprehensionScore !== undefined && comprehensionScore !== null) {
+        if (typeof comprehensionScore !== 'number' || comprehensionScore < 1 || comprehensionScore > 5) {
+            return NextResponse.json(
+              { error: 'Comprehension score must be a number between 1 and 5.' },
+              { status: 400 }
+            );
+        }
     }
 
     await connectMongoDB();

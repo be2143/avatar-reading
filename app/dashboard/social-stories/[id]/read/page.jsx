@@ -3,20 +3,30 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { Share2, Book, Calendar, Eye, User, Play, Plus, Printer, MoreVertical, MoreHorizontal } from 'lucide-react';
-import BehavioralSurveyPopup from '@/components/BehavioralSurvey';
+import { useSession } from 'next-auth/react';
+import { Globe, Share2, Book, Calendar, Eye, User, Play, Plus, Printer, MoreVertical, MoreHorizontal, Edit3, Star, ArrowRight } from 'lucide-react';
+import BehavioralSurveyInline from '@/components/BehavioralSurveyInline';
 
 export default function PersonalizedStoryReader() {
     const { id } = useParams();
+    const { data: session } = useSession();
     const [story, setStory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     const fixedVoices = [
-        { id: 'Ivy', name: 'Ivy' },
-        { id: 'Justin', name: 'Justin' },
+        { id: 'Ivy', name: 'Ivy (English, child)' },
+        { id: 'Justin', name: 'Justin (English, child)' },
+        { id: 'Hala', name: 'Hala (English, Arabic - Gulf)' },
+        { id: 'Zayd', name: 'Zayd (English, Arabic - Gulf)' },
+        // { id: 'Farah', name: 'Farah (Arabic - Egypt)' },
+        { id: 'Youssef', name: 'Youssef (English, Arabic - Egypt)' },
+        { id: 'Alia', name: 'Alia (English, Arabic - Egypt)' },
+        // { id: 'Ali', name: 'Ali (Arabic - Gulf)' }
     ];
     const [selectedVoiceId, setSelectedVoiceId] = useState();
+    const speedOptions = [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1];
+    const [readerSpeed, setReaderSpeed] = useState(0.85);
 
     const [isReading, setIsReading] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
@@ -33,14 +43,20 @@ export default function PersonalizedStoryReader() {
     const [isGeneratingActivity, setIsGeneratingActivity] = useState(false);
     const [comprehensionScore, setComprehensionScore] = useState(null);
     const [studentData, setStudentData] = useState(null);
-    const [showBehavioralSurveyPopup, setShowBehavioralSurveyPopup] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-
+    const [activityRating, setActivityRating] = useState(0);
+    const [activityFeedback, setActivityFeedback] = useState('');
+    const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+    const [savedActivities, setSavedActivities] = useState([]);
+    const [selectedSavedActivity, setSelectedSavedActivity] = useState(null);
+    const [showBehavioralSurvey, setShowBehavioralSurvey] = useState(false);
 
     const audioRef = useRef(null);
     const timerRef = useRef(null);
+    const readingLanguageRef = useRef(null);
     const router = useRouter();
     const menuRef = useRef(null);
+    const [language, setLanguage] = useState('en');
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -54,6 +70,14 @@ export default function PersonalizedStoryReader() {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
+
+    const handleLanguageToggle = () => {
+        // Stop reading if active to allow language change to take effect
+        if (isReading) {
+            handleStopReading();
+        }
+        setLanguage(language === 'ar' ? 'en' : 'ar');
+    };
 
     // Modified stop reading function - doesn't stop timer
     const handleStopReading = useCallback((keepProgress = false) => {
@@ -69,6 +93,8 @@ export default function PersonalizedStoryReader() {
                 audioRef.current.src = '';
                 audioRef.current.load();
                 setIsPaused(false);
+                // Reset reading language ref when completely stopping (not pausing)
+                readingLanguageRef.current = null;
             }
         }
         setIsReading(false);
@@ -109,6 +135,10 @@ export default function PersonalizedStoryReader() {
             console.log('Fetching student data for story:', story.student);
             fetchStudentData(story.student);
         }
+        // Load saved activities when story loads
+        if (story?.savedActivities && story.savedActivities.length > 0) {
+            setSavedActivities(story.savedActivities);
+        }
     }, [story]);
 
     const fetchStory = async () => {
@@ -137,6 +167,12 @@ export default function PersonalizedStoryReader() {
         }
     };
 
+    // Helper function to determine if survey should be shown
+    const shouldShowBehavioralSurvey = (sessionCount) => {
+        // Show for all sessions
+        return true;
+    };
+
     const fetchStudentData = async (studentId) => {
         console.log('studentId: ', studentId);
         try {
@@ -144,8 +180,7 @@ export default function PersonalizedStoryReader() {
             if (res.ok) {
                 const data = await res.json();
                 setStudentData(data.student);
-                // Show popup when student data is loaded
-                setShowBehavioralSurveyPopup(true);
+                // Behavioral survey will be shown inline based on shouldShowBehavioralSurvey
             } else {
                 console.error('Failed to fetch student data:', res.status, res.statusText);
             }
@@ -186,10 +221,18 @@ export default function PersonalizedStoryReader() {
         setError(null);
 
         try {
-            const response = await fetch('/api/generate-speech', {
+            // Use ElevenLabs for Egyptian voices, Polly for others
+            const isElevenLabsVoice = selectedVoiceId === 'Youssef' || selectedVoiceId === 'Alia';
+            const isArabicVoice = selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd' || selectedVoiceId === 'Youssef' || selectedVoiceId === 'Alia';
+            const apiEndpoint = isElevenLabsVoice ? '/api/generate-speech-elevenlabs' : '/api/generate-speech-polly';
+
+            // Explicitly decide whether content is Arabic (by language or Arabic voice selection)
+            const isArabic = (language === 'ar' && hasArabicText) || isArabicVoice;
+
+            const response = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, voiceId: selectedVoiceId }),
+                body: JSON.stringify({ text, voiceId: selectedVoiceId, isArabic, speed: readerSpeed }),
             });
 
             if (!response.ok) {
@@ -211,7 +254,9 @@ export default function PersonalizedStoryReader() {
             audioRef.current.onended = () => {
                 if (story?.visualScenes && sceneIndexToUpdate !== -1 && sceneIndexToUpdate < story.visualScenes.length - 1) {
                     setTimeout(() => {
-                        fetchAndPlayAudio(story.visualScenes[sceneIndexToUpdate + 1].text, sceneIndexToUpdate + 1);
+                        const nextIndex = sceneIndexToUpdate + 1;
+                        const nextText = getSceneTextByIndex(nextIndex);
+                        fetchAndPlayAudio(nextText, nextIndex);
                     }, 1000);
                 } else {
                     handleStopReading();
@@ -291,18 +336,20 @@ export default function PersonalizedStoryReader() {
                       background-color: #fafafa;
                     ">
                       ${scene.image ? `
-                        <div style="text-align: center; margin: 15px 0;">
+                        <div style="width: 100%; text-align: center; margin: 15px 0;">
                           <img src="${scene.image}" style="
-                            max-width: 100%; 
-                            height: auto; 
+                            max-width: 60%;
+                            height: auto;
+                            display: block;
+                            margin: 0 auto;
                             border-radius: 6px;
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                           " />
                         </div>
                       ` : ''}
                       <div style="
-                        font-size: 16px; 
-                        line-height: 1.6; 
+                        font-size: 20px; 
+                        line-height: 1.7; 
                         color: #374151;
                         text-align: justify;
                       ">${scene.text}</div>
@@ -317,8 +364,8 @@ export default function PersonalizedStoryReader() {
                       background-color: #fafafa;
                     ">
                       <div style="
-                        font-size: 16px; 
-                        line-height: 1.6; 
+                        font-size: 20px; 
+                        line-height: 1.7; 
                         color: #374151;
                         text-align: justify;
                         white-space: pre-line;
@@ -430,16 +477,24 @@ export default function PersonalizedStoryReader() {
             }
         }
 
+        // Lock reading language at start so it remains consistent across scenes
+        readingLanguageRef.current = language;
+
         let textToPlay = '';
         let initialSceneIndex = 0;
 
         if (story?.visualScenes?.length > 0) {
-            textToPlay = story.visualScenes[currentSceneIndex]?.text;
+            // Use per-scene text based on current language
+            textToPlay = getSceneTextByIndex(currentSceneIndex);
             initialSceneIndex = currentSceneIndex;
         } else if (story?.generatedText) {
-            textToPlay = story.generatedText;
+            textToPlay = language === 'ar' && hasArabicText
+                ? (story.story_content_arabic)
+                : (story.generatedText || story.story_content);
         } else if (story?.story_content) {
-            textToPlay = story.story_content;
+            textToPlay = language === 'ar' && hasArabicText
+                ? (story.story_content_arabic)
+                : story.story_content;
         } else {
             alert('No story content available to read.');
             return;
@@ -463,11 +518,16 @@ export default function PersonalizedStoryReader() {
         setTimeout(() => {
             let textToPlay = '';
             if (story?.visualScenes?.length > 0) {
-                textToPlay = story.visualScenes[0].text;
+                // Start from scene 0 in the selected language
+                textToPlay = getSceneTextByIndex(0);
             } else if (story?.generatedText) {
-                textToPlay = story.generatedText;
+                textToPlay = language === 'ar' && hasArabicText
+                    ? (story.story_content_arabic)
+                    : (story.generatedText || story.story_content);
             } else if (story?.story_content) {
-                textToPlay = story.story_content;
+                textToPlay = language === 'ar' && hasArabicText
+                    ? (story.story_content_arabic)
+                    : story.story_content;
             }
 
             if (textToPlay) {
@@ -486,6 +546,9 @@ export default function PersonalizedStoryReader() {
 
         setIsGeneratingActivity(true);
         try {
+            // Get previous feedback from story
+            const previousFeedback = story.activityFeedback || [];
+
             const res = await fetch('/api/generate-activity', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -494,7 +557,13 @@ export default function PersonalizedStoryReader() {
                     comprehension_level: story.student?.comprehensionLevel || 'not specified',
                     story_title: story.title,
                     story_content: story.generatedText || story.story_content || story.visualScenes?.[currentSceneIndex]?.text || '',
-                    interests: story.student?.interests || 'not specified'
+                    story_goal: story.goal || '',
+                    diagnosis: story.student?.diagnosis || 'not specified',
+                    learning_preferences: story.student?.learningPreferences || 'not specified',
+                    challenges: story.student?.challenges || 'not specified',
+                    additional_notes: story.student?.notes || 'not specified',
+                    interests: story.student?.interests || 'not specified',
+                    previous_feedback: previousFeedback
                 }),
             });
 
@@ -505,6 +574,10 @@ export default function PersonalizedStoryReader() {
 
             const data = await res.json();
             setSuggestedActivity(data.activity);
+            setActivityRating(0);
+            setActivityFeedback('');
+            setShowFeedbackInput(false);
+            setSelectedSavedActivity(null);
             setActivityCompleted(false);
             setActivityUsefulness(null);
         } catch (err) {
@@ -515,6 +588,79 @@ export default function PersonalizedStoryReader() {
         }
     };
 
+    const handleActivityRating = async (rating) => {
+        if (!suggestedActivity || !story) return;
+
+        setActivityRating(rating);
+
+        // If rating < 3, show feedback input
+        if (rating < 3) {
+            setShowFeedbackInput(true);
+        } else {
+            // If rating >= 3, save immediately
+            await saveActivityRating(rating, null);
+        }
+    };
+
+    const saveActivityRating = async (rating, feedback) => {
+        if (!story || !id) return;
+
+        try {
+            const res = await fetch(`/api/stories/${id}/activity`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    activity: suggestedActivity,
+                    rating: rating,
+                    feedback: feedback || null
+                }),
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || `Failed to save activity rating: ${res.statusText}`);
+            }
+
+            const data = await res.json();
+            setStory(data.story);
+
+            // Update saved activities if rating >= 3
+            if (rating >= 3 && data.story.savedActivities) {
+                setSavedActivities(data.story.savedActivities);
+            }
+
+            // Reset state
+            if (rating >= 3) {
+                setSuggestedActivity('');
+                setActivityRating(0);
+                setShowFeedbackInput(false);
+                setActivityFeedback('');
+            }
+
+            alert('Activity rating saved successfully!');
+        } catch (err) {
+            console.error('Error saving activity rating:', err);
+            alert('Failed to save activity rating. Please try again.');
+        }
+    };
+
+    const handleSubmitFeedback = async () => {
+        if (!activityFeedback.trim()) {
+            alert('Please provide feedback before submitting.');
+            return;
+        }
+
+        await saveActivityRating(activityRating, activityFeedback);
+    };
+
+    const useSavedActivity = (activity) => {
+        setSelectedSavedActivity(activity);
+        setSuggestedActivity(activity.activity);
+        setActivityRating(0);
+        setActivityFeedback('');
+        setShowFeedbackInput(false);
+    };
+
     const resetSessionState = () => {
         setSessionNotes('');
         setTimeSpent(0);
@@ -523,6 +669,10 @@ export default function PersonalizedStoryReader() {
         setActivityCompleted(false);
         setActivityUsefulness(null);
         setComprehensionScore(null);
+        setActivityRating(0);
+        setActivityFeedback('');
+        setShowFeedbackInput(false);
+        setSelectedSavedActivity(null);
     };
 
     const handleSaveBehavioralScore = async (newScore) => {
@@ -550,7 +700,6 @@ export default function PersonalizedStoryReader() {
                 currentBehavioralScore: newScore
             }));
 
-            setShowBehavioralSurveyPopup(false);
             alert('Behavioral score updated successfully!');
         } catch (error) {
             console.error('Error updating behavioral score:', error);
@@ -561,8 +710,9 @@ export default function PersonalizedStoryReader() {
     const handleSaveSession = async () => {
         if (!story || !id) return;
 
-        if (!comprehensionScore) {
-            alert('Please select a comprehension score before saving the session.');
+        // Validate session notes is required
+        if (!sessionNotes || !sessionNotes.trim()) {
+            alert('Please add session notes before saving the session.');
             return;
         }
 
@@ -598,15 +748,13 @@ export default function PersonalizedStoryReader() {
             const updatedStoryResponse = await res.json();
             setStory(updatedStoryResponse.story);
 
-            setSessionNumber((prev) => prev + 1);
+            const newSessionCount = updatedStoryResponse.story?.sessions?.length || 0;
+            setSessionNumber(newSessionCount + 1);
             resetSessionState();
 
             alert('Session saved successfully!');
 
-            // Show popup when student exists in the story
-            if (story.student) {
-                setShowBehavioralSurveyPopup(true);
-            }
+            // Behavioral survey will be shown inline based on shouldShowBehavioralSurvey
         } catch (err) {
             console.error('Error saving session:', err);
             setError(`Failed to save session: ${err.message}`);
@@ -628,11 +776,32 @@ export default function PersonalizedStoryReader() {
     );
 
     const isVisualStory = story.visualScenes && story.visualScenes.length > 0;
+    const hasArabicText = !!story.story_content_arabic;
+    const hasEnglishLongText = !!story.story_content; // gate for Arabic voices and toggle visibility
+
+    // For visual stories, align Arabic long text to scenes by splitting on blank lines
+    const arabicScenes = hasArabicText
+        ? story.story_content_arabic.split('\n\n').filter((s) => s.trim())
+        : [];
+
+    const getSceneTextByIndex = (index) => {
+        if (!isVisualStory) return '';
+        // Use readingLanguageRef only when actively reading, otherwise use current language state
+        const lang = isReading ? (readingLanguageRef.current || language) : language;
+        if (lang === 'ar' && hasArabicText) {
+            return arabicScenes[index] || story.visualScenes[index]?.text || '';
+        }
+        return story.visualScenes[index]?.text || '';
+    };
+
     const currentTextContent = isVisualStory
-        ? story.visualScenes[currentSceneIndex]?.text
-        : story.generatedText || story.story_content;
+        ? getSceneTextByIndex(currentSceneIndex)
+        : (language === 'ar' && hasArabicText
+            ? story.story_content_arabic
+            : (story.generatedText || story.story_content));
     const totalScenesForProgress = isVisualStory ? story.visualScenes.length : 1;
     const questionsTotal = isVisualStory ? story.visualScenes.length : 4;
+    const isArabicDisplay = language === 'ar' && hasArabicText;
 
     return (
         <div className="min-h-screen p-6 bg-gray-50">
@@ -652,7 +821,7 @@ export default function PersonalizedStoryReader() {
                 Back to Stories
             </button>
 
-            <div className="mb-6 flex">
+            <div className={`flex items-center gap-3 ${story?.goal ? '' : 'mb-6'}`}>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-800 to-pink-600 bg-clip-text text-transparent">
 
                     {story.title}</h1>
@@ -669,6 +838,20 @@ export default function PersonalizedStoryReader() {
 
                     {isMenuOpen && (
                         <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl py-1 z-50 border border-gray-100 overflow-hidden">
+                            {/* Edit Story Option - Only show for non-system stories created by current user */}
+                            {story.source !== 'system' && story.createdBy === session?.user?.id && (
+                                <button
+                                    onClick={() => {
+                                        router.push(`/dashboard/social-stories/${story._id}/edit`);
+                                        setIsMenuOpen(false);
+                                    }}
+                                    className="block w-full px-4 py-2.5 text-sm text-gray-800 hover:bg-purple-50 transition-colors duration-150 text-left flex items-center gap-3"
+                                >
+                                    <Edit3 className="w-4 h-4 text-purple-600" />
+                                    <span>Edit Story</span>
+                                </button>
+                            )}
+
                             {/* Print Story Option */}
                             <button
                                 onClick={() => {
@@ -697,7 +880,13 @@ export default function PersonalizedStoryReader() {
                 </div>
             </div>
 
-            <div className="flex items-center gap-4 mb-6">
+            {story?.goal && (
+                <div className="mb-6">
+                    <p className="text-sm font-semibold text-purple-900 inline">Story Goal: </p>
+                    <p className="text-sm text-purple-800 inline">{story.goal}</p>
+                </div>
+            )}
+            <div className="flex items-center gap-3 mb-6">
                 <div className="relative w-full max-w-xs">
                     <select
                         value={selectedVoiceId}
@@ -717,7 +906,11 @@ export default function PersonalizedStoryReader() {
     `}
                     >
                         <option value="">Select Voice</option>
-                        {fixedVoices.map((voice) => (
+                        {(
+                            (language === 'ar' && hasArabicText)
+                                ? fixedVoices.filter(v => v.id !== 'Ivy' && v.id !== 'Justin')
+                                : fixedVoices
+                        ).map((voice) => (
                             <option key={voice.id} value={voice.id}>
                                 {voice.name}
                             </option>
@@ -728,6 +921,47 @@ export default function PersonalizedStoryReader() {
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                         <svg
                             className={`w-5 h-5 text-gray-400 ${isReading ? 'opacity-70' : ''}`}
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                        >
+                            <path
+                                fillRule="evenodd"
+                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                clipRule="evenodd"
+                            />
+                        </svg>
+                    </div>
+                </div>
+
+                {/* Reader speed selector */}
+                <div className="relative w-full max-w-[160px]">
+                    <select
+                        value={readerSpeed}
+                        onChange={(e) => {
+                            setReaderSpeed(parseFloat(e.target.value));
+                            handleStopReading();
+                        }}
+                        disabled={isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd'))}
+                        className={`
+      w-full px-4 py-2.5 pr-10 
+      border border-gray-300 rounded-lg 
+      bg-white text-gray-800
+      focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-transparent
+      transition-all duration-200
+      appearance-none
+      ${isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd')) ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
+    `}
+                    >
+                        {speedOptions.map((s) => (
+                            <option key={s} value={s}>{`Speed: ${s}`}</option>
+                        ))}
+                    </select>
+
+                    {/* Custom dropdown arrow */}
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg
+                            className={`w-5 h-5 text-gray-400 ${isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd')) ? 'opacity-70' : ''}`}
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 20 20"
                             fill="currentColor"
@@ -836,10 +1070,25 @@ export default function PersonalizedStoryReader() {
                             </div>
 
                             <div className="p-6">
-                                <h3 className="text-lg font-semibold text-purple-700 mb-3">
-                                    Scene {currentSceneIndex + 1}
-                                </h3>
-                                <p className="text-gray-800 leading-relaxed">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-lg font-semibold text-purple-700">
+                                        Scene {currentSceneIndex + 1}
+                                    </h3>
+                                    {hasEnglishLongText && (
+                                        <button
+                                            onClick={handleLanguageToggle}
+                                            disabled={!hasArabicText || isReading}
+                                            className={`px-3 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium ${hasArabicText && !isReading
+                                                ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900'
+                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                }`}
+                                        >
+                                            <Globe className="w-4 h-4 text-purple-500" />
+                                            <span>{language === 'ar' ? 'Arabic' : 'English'}</span>
+                                        </button>
+                                    )}
+                                </div>
+                                <p className={`text-gray-800 leading-relaxed ${isArabicDisplay ? 'text-right' : ''}`} dir={isArabicDisplay ? 'rtl' : 'ltr'}>
                                     {currentTextContent}
                                 </p>
                             </div>
@@ -859,8 +1108,23 @@ export default function PersonalizedStoryReader() {
                             </div>
 
                             <div className="p-6">
-                                <h3 className="text-lg font-semibold text-purple-700 mb-3">Story Content</h3>
-                                <p className="text-gray-800 leading-relaxed whitespace-pre-line">{currentTextContent}</p>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-lg font-semibold text-purple-700">Story Content</h3>
+                                    {hasEnglishLongText && (
+                                        <button
+                                            onClick={handleLanguageToggle}
+                                            disabled={!hasArabicText || isReading}
+                                            className={`px-3 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium ${hasArabicText && !isReading
+                                                ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900'
+                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                }`}
+                                        >
+                                            <Globe className="w-4 h-4 text-purple-500" />
+                                            <span>{language === 'ar' ? 'Arabic' : 'English'}</span>
+                                        </button>
+                                    )}
+                                </div>
+                                <p className={`text-gray-800 leading-relaxed whitespace-pre-line ${isArabicDisplay ? 'text-right' : ''}`} dir={isArabicDisplay ? 'rtl' : 'ltr'}>{currentTextContent}</p>
                             </div>
                         </div>
                     )}
@@ -868,7 +1132,20 @@ export default function PersonalizedStoryReader() {
 
                 <div className="space-y-6">
                     <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">Session Progress</h3>
+                        <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                            Reading Session with{' '}
+                            {story?.isPersonalized && studentData ? (
+                                <button
+                                    onClick={() => router.push(`/dashboard/students/${studentData._id}`)}
+                                    className="text-purple-600 hover:text-purple-800 underline font-semibold transition-colors"
+                                >
+                                    {studentData.name}
+                                </button>
+                            ) : (
+                                <span>Student</span>
+                            )}
+                        </h3>
+                        
 
                         <div className="grid grid-cols-2 gap-3 mb-4">
                             <div className="bg-green-100 p-3 rounded-lg text-center">
@@ -881,12 +1158,70 @@ export default function PersonalizedStoryReader() {
                                 <div className="text-xs text-blue-600">Session</div>
                             </div>
                         </div>
+
+                        {/* Story goal */}
+                        {/* {story?.goal && (
+                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
+                                <p className="text-sm font-semibold text-purple-900 inline">Story Goal: </p>
+                                <p className="text-sm text-purple-800 inline">{story.goal}</p>
+                            </div>
+                        )} */}
+
+                        {/* Behavioral Survey */}
+                        {story?.isPersonalized && studentData && (
+                            <button
+                                type="button"
+                                onClick={() => setShowBehavioralSurvey(true)}
+                                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                            >
+                                Take Behavioral Change Survey
+                            </button>
+                        )}
                     </div>
-
                     <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-3">Comprehension Check & Activity</h3>
+                        <h3 className="text-lg font-semibold text-gray-700 mb-3">Comprehension Check Activity</h3>
 
-                        {!suggestedActivity ? (
+                        {/* Display saved activities if available */}
+                        {savedActivities.length > 0 && !suggestedActivity && (
+                            <div className="mb-4 space-y-2">
+                                <p className="text-sm font-medium text-gray-600">Previously Saved Activities:</p>
+                                {savedActivities.map((savedActivity, idx) => (
+                                    <div key={idx} className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                        <p className="text-sm text-blue-800">{savedActivity.activity}</p>
+                                        <div className="flex items-center gap-1 mt-1">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star
+                                                    key={star}
+                                                    className={`w-4 h-4 ${star <= savedActivity.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="pt-2 border-t border-gray-200">
+                                    <button
+                                        onClick={generateActivity}
+                                        disabled={isGeneratingActivity}
+                                        className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                        >
+                                        {isGeneratingActivity ? (
+                                            <>
+                                                <span className="animate-spin">⏳</span>
+                                                Generating New Activity...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>🎯</span>
+                                                Generate New Activity
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Generate activity button when no saved activities */}
+                        {savedActivities.length === 0 && !suggestedActivity && (
                             <button
                                 onClick={generateActivity}
                                 disabled={isGeneratingActivity}
@@ -904,67 +1239,132 @@ export default function PersonalizedStoryReader() {
                                     </>
                                 )}
                             </button>
-                        ) : (
+                        )}
+
+                        {/* Display suggested activity with rating */}
+                        {suggestedActivity && (
                             <div className="space-y-4">
                                 <div className="bg-green-50 p-3 rounded-lg border border-green-200">
                                     <h4 className="font-medium text-green-800 mb-2">Suggested Activity:</h4>
                                     <p className="text-green-700 text-sm">{suggestedActivity}</p>
+                                    {selectedSavedActivity && (
+                                        <p className="text-xs text-green-600 mt-1 italic">(From saved activities)</p>
+                                    )}
                                 </div>
+
+                                {/* Star Rating */}
+                                {activityRating === 0 && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Rate this activity:
+                                        </label>
+                                        <div className="flex gap-1">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <button
+                                                    key={star}
+                                                    onClick={() => handleActivityRating(star)}
+                                                    className="focus:outline-none transition-transform hover:scale-110"
+                                                >
+                                                    <Star className="w-8 h-8 text-gray-300 hover:text-yellow-400" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Show rating after selection */}
+                                {activityRating > 0 && (
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-700 mb-2">Your Rating:</p>
+                                        <div className="flex gap-1 mb-2">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star
+                                                    key={star}
+                                                    className={`w-6 h-6 ${star <= activityRating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Feedback input for low ratings */}
+                                {showFeedbackInput && activityRating < 3 && (
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Please provide feedback to help improve future activities:
+                                        </label>
+                                        <textarea
+                                            value={activityFeedback}
+                                            onChange={(e) => setActivityFeedback(e.target.value)}
+                                            placeholder="What could be improved about this activity?"
+                                            className="w-full h-24 p-3 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                        />
+                                        <button
+                                            onClick={handleSubmitFeedback}
+                                            disabled={!activityFeedback.trim()}
+                                            className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            Submit Feedback
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
-
-                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-lg font-semibold text-gray-700">Session Notes</h3>
-                        </div>
-
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Evaluate the student comprehension: <span className="text-red-500">*</span>
-                                </label>
-                                <div className="flex gap-2">
-                                    {[1, 2, 3, 4, 5].map((rating) => (
-                                        <button
-                                            key={rating}
-                                            onClick={() => setComprehensionScore(rating)}
-                                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${comprehensionScore === rating
-                                                ? 'bg-purple-600 text-white'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                }`}
-                                            title={`${rating} - ${rating === 1 ? 'Not satisfactory' : rating === 5 ? 'Very well' : 'Somewhat useful'}`}
-                                        >
-                                            {rating}
-                                        </button>
-                                    ))}
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                    1 = Not satisfactory, 5 = Very well
-                                </p>
-                                {comprehensionScore && (
-                                    <p className="text-sm text-purple-600 p-3 mt-2 font-medium">
-                                        Selected: {comprehensionScore}/5 - {comprehensionScore === 1 ? 'Not satisfactory' : comprehensionScore === 2 ? 'Somewhat satisfactory' : comprehensionScore === 3 ? 'Satisfactory' : comprehensionScore === 4 ? 'Good' : 'Very well'}
-                                    </p>
-                                )}
+                    {story?.isPersonalized && (
+                        <div className="bg-white p-4 rounded-lg shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold text-gray-700">Session Notes<span className="text-red-500">*</span></h3>
                             </div>
-                        </div>
 
-                        <textarea
-                            value={sessionNotes}
-                            onChange={(e) => setSessionNotes(e.target.value)}
-                            placeholder="Add observations about engagement, understanding, or behavioral responses during this session..."
-                            className="w-full h-32 mt-3 p-3 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                        <button
-                            onClick={handleSaveSession}
-                            className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                        >
-                            Save Session
-                        </button>
-                    </div>
+                            <textarea
+                                value={sessionNotes}
+                                onChange={(e) => setSessionNotes(e.target.value)}
+                                placeholder="Add observations about engagement, understanding, or behavioral responses during this session... (Required)"
+                                required
+                                className="w-full h-32 mt-3 p-3 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <button
+                                onClick={handleSaveSession}
+                                disabled={!sessionNotes || !sessionNotes.trim()}
+                                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Save Session
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {showBehavioralSurvey && story?.isPersonalized && studentData && (
+                <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between px-4 py-3">
+                            <h3 className="text-lg font-semibold text-gray-800 px-4 pt-2">
+                                Behavioral Change Survey for {studentData?.name || 'Student'}
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowBehavioralSurvey(false)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none"
+                                aria-label="Close survey"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="p-8 pt-2">
+                            <BehavioralSurveyInline
+                                student={studentData}
+                                onSaveScore={async (score) => {
+                                    await handleSaveBehavioralScore(score);
+                                    setShowBehavioralSurvey(false);
+                                }}
+                                storyGoal={story?.goal}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isImageExpanded && (
                 <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -1029,13 +1429,6 @@ export default function PersonalizedStoryReader() {
                 </div>
             )}
 
-            {showBehavioralSurveyPopup && (
-                <BehavioralSurveyPopup
-                    student={studentData || { name: 'Student', currentBehavioralScore: 'N/A' }}
-                    onClose={() => setShowBehavioralSurveyPopup(false)}
-                    onSaveScore={handleSaveBehavioralScore}
-                />
-            )}
         </div>
     );
 }

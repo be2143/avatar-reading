@@ -27,10 +27,7 @@ export default function RegisterForm() {
       return;
     }
 
-    if (!image) {
-      setError("Please upload a profile image.");
-      return;
-    }
+    // Profile image is optional
 
     try {
       const resUserExists = await fetch("api/userExists", {
@@ -49,7 +46,9 @@ export default function RegisterForm() {
       formData.append("name", name);
       formData.append("email", email);
       formData.append("password", password);
-      formData.append("image", image);
+      if (image) {
+        formData.append("image", image);
+      }
 
       const res = await fetch("api/register", {
         method: "POST",
@@ -70,10 +69,15 @@ export default function RegisterForm() {
   };
 
   return (
-    <div className="grid place-items-center h-screen">
-      <div className="shadow-lg p-5 rounded-lg border-t-4 border-purple-400">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <div className="flex flex-row items-center gap-2">
+      {/* <img src="/app_logo.png" alt="Lab Logo" className="h-36" /> */}
+        <img src="/lab_logo.png" alt="Lab Logo" className="w-20 h-20" />
+        <img src="/nyu_logo.png" alt="NYU Logo" className="h-16" />
+      </div>
+      <p className="text-xs text-gray-500 text-center px-4">Welcome to AdaptED Stories! Instantly create and personalize social stories.</p>
+      <div className="shadow-lg p-5 rounded-lg">
         <h1 className="text-xl font-bold my-4">Register</h1>
-
         <form onSubmit={handleSubmit} className="flex flex-col gap-3" encType="multipart/form-data">
           <input
             onChange={(e) => setName(e.target.value)}
@@ -95,6 +99,7 @@ export default function RegisterForm() {
             type="password"
             placeholder="Confirm Password"
           />
+          <label htmlFor="imageUpload" className="block font-semibold text-gray-700">Profile Image (Optional):</label>
           <input
             type="file"
             accept="image/*"

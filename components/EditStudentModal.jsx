@@ -19,7 +19,6 @@ export default function EditStudentModal({ student, onClose, onSave }) {
     learningPreferences: '',
     interests: '',
     challenges: '',
-    goals: '',
     notes: '',
     image: '', // Assuming image is a URL or base64 string
   });
@@ -45,7 +44,6 @@ export default function EditStudentModal({ student, onClose, onSave }) {
         learningPreferences: student.learningPreferences || '',
         interests: student.interests || '',
         challenges: student.challenges || '',
-        goals: student.goals || '',
         notes: student.notes || '',
         image: student.image || '',
       });
@@ -231,11 +229,10 @@ export default function EditStudentModal({ student, onClose, onSave }) {
               <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
               Learning Preferences & Interests
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="learningPreferences" className="block text-sm font-medium text-gray-700 mb-2">
-                  Learning Preferences
-                </label>
+                {/* <label htmlFor="learningPreferences" className="block text-sm font-medium text-gray-700 mb-2">
+                  Learning Preferences / Interests
+                </label> */}
                 <textarea
                   id="learningPreferences"
                   name="learningPreferences"
@@ -246,34 +243,18 @@ export default function EditStudentModal({ student, onClose, onSave }) {
                   placeholder="e.g., Visual storytelling, hands-on activities"
                 ></textarea>
               </div>
-              <div>
-                <label htmlFor="interests" className="block text-sm font-medium text-gray-700 mb-2">
-                  Interests
-                </label>
-                <textarea
-                  id="interests"
-                  name="interests"
-                  value={formData.interests}
-                  onChange={handleChange}
-                  rows="3"
-                  className="w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200"
-                  placeholder="e.g., Animals, space, music, sports"
-                ></textarea>
-              </div>
-            </div>
           </div>
 
-          {/* Challenges & Goals */}
+          {/* Challenges */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <div className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
-              Challenges & Goals
+              Challenges
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="challenges" className="block text-sm font-medium text-gray-700 mb-2">
+                {/* <label htmlFor="challenges" className="block text-sm font-medium text-gray-700 mb-2">
                   Challenges
-                </label>
+                </label> */}
                 <textarea
                   id="challenges"
                   name="challenges"
@@ -284,21 +265,6 @@ export default function EditStudentModal({ student, onClose, onSave }) {
                   placeholder="e.g., Difficulty with social cues, sensory sensitivities"
                 ></textarea>
               </div>
-              <div>
-                <label htmlFor="goals" className="block text-sm font-medium text-gray-700 mb-2">
-                  Goals
-                </label>
-                <textarea
-                  id="goals"
-                  name="goals"
-                  value={formData.goals}
-                  onChange={handleChange}
-                  rows="4"
-                  className="w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200"
-                  placeholder="e.g., Improve communication skills, manage emotions"
-                ></textarea>
-              </div>
-            </div>
           </div>
 
           {/* Notes */}
@@ -308,9 +274,9 @@ export default function EditStudentModal({ student, onClose, onSave }) {
               Additional Notes
             </h3>
             <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+              {/* <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
                 Notes
-              </label>
+              </label> */}
               <textarea
                 id="notes"
                 name="notes"

@@ -3,6 +3,7 @@ import { connectMongoDB } from "@/lib/mongodb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import Story from "@/models/story";
+import { calculateAverageSessionTime } from "@/lib/aiAnalysisUtils";
 
 export async function GET(req) {
   try {
@@ -34,21 +35,11 @@ async function calculateFeatureUsage(userId) {
   let generalReadingCount = 0;
   let storyGenerationCount = 0;
   let personalizationCount = 0;
-  let totalUsageTime = 0;
-  let totalSessions = 0;
 
   stories.forEach(story => {
     // Count sessions for general reading
     if (story.sessions && story.sessions.length > 0) {
       generalReadingCount += story.sessions.length;
-      
-      // Calculate total usage time
-      story.sessions.forEach(session => {
-        if (session.timeSpent) {
-          totalUsageTime += session.timeSpent;
-          totalSessions++;
-        }
-      });
     }
 
     // Count story generation (AI-generated stories)
@@ -62,8 +53,8 @@ async function calculateFeatureUsage(userId) {
     }
   });
 
-  // Calculate average usage time
-  const avgUsageTime = totalSessions > 0 ? totalUsageTime / totalSessions / 60 : 0; // Convert to minutes
+  // Calculate average usage time using shared utility function
+  const { avgSessionMinutes: avgUsageTime } = await calculateAverageSessionTime(userId);
 
   // Determine usage levels
   const getUsageLevel = (count, total) => {
