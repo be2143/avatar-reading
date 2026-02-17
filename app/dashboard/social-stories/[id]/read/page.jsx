@@ -19,10 +19,8 @@ export default function PersonalizedStoryReader() {
         { id: 'Justin', name: 'Justin (English, child)' },
         { id: 'Hala', name: 'Hala (English, Arabic - Gulf)' },
         { id: 'Zayd', name: 'Zayd (English, Arabic - Gulf)' },
-        // { id: 'Farah', name: 'Farah (Arabic - Egypt)' },
         { id: 'Youssef', name: 'Youssef (English, Arabic - Egypt)' },
         { id: 'Alia', name: 'Alia (English, Arabic - Egypt)' },
-        // { id: 'Ali', name: 'Ali (Arabic - Gulf)' }
     ];
     const [selectedVoiceId, setSelectedVoiceId] = useState();
     const speedOptions = [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1];
@@ -50,7 +48,11 @@ export default function PersonalizedStoryReader() {
     const [savedActivities, setSavedActivities] = useState([]);
     const [selectedSavedActivity, setSelectedSavedActivity] = useState(null);
     const [showBehavioralSurvey, setShowBehavioralSurvey] = useState(false);
+    const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+    const [generatingVideoSceneIndex, setGeneratingVideoSceneIndex] = useState(-1);
+    const [readingMode, setReadingMode] = useState('audio'); // 'audio' or 'avatar'
 
+    const videoRef = useRef(null);
     const audioRef = useRef(null);
     const timerRef = useRef(null);
     const readingLanguageRef = useRef(null);
@@ -72,16 +74,14 @@ export default function PersonalizedStoryReader() {
     }, []);
 
     const handleLanguageToggle = () => {
-        // Stop reading if active to allow language change to take effect
         if (isReading) {
             handleStopReading();
         }
         setLanguage(language === 'ar' ? 'en' : 'ar');
     };
 
-    // Modified stop reading function - doesn't stop timer
     const handleStopReading = useCallback((keepProgress = false) => {
-        if (audioRef.current) {
+        if (readingMode === 'audio' && audioRef.current) {
             if (keepProgress) {
                 audioRef.current.pause();
                 setIsPaused(true);
@@ -93,17 +93,32 @@ export default function PersonalizedStoryReader() {
                 audioRef.current.src = '';
                 audioRef.current.load();
                 setIsPaused(false);
-                // Reset reading language ref when completely stopping (not pausing)
+                readingLanguageRef.current = null;
+            }
+        } else if (readingMode === 'avatar' && videoRef.current) {
+            if (keepProgress) {
+                videoRef.current.pause();
+                setIsPaused(true);
+            } else {
+                videoRef.current.onended = null;
+                videoRef.current.onerror = null;
+                videoRef.current.pause();
+                videoRef.current.currentTime = 0;
+                videoRef.current.src = '';
+                videoRef.current.load();
+                setIsPaused(false);
                 readingLanguageRef.current = null;
             }
         }
         setIsReading(false);
-        // Timer continues running
-    }, []);
+    }, [readingMode]);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
             audioRef.current = new Audio();
+            videoRef.current = document.createElement('video');
+            videoRef.current.style.display = 'none';
+            document.body.appendChild(videoRef.current);
         }
 
         timerRef.current = setInterval(() => {
@@ -114,6 +129,9 @@ export default function PersonalizedStoryReader() {
             handleStopReading();
             if (timerRef.current) {
                 clearInterval(timerRef.current);
+            }
+            if (videoRef.current && videoRef.current.parentNode) {
+                videoRef.current.parentNode.removeChild(videoRef.current);
             }
         };
     }, [handleStopReading]);
@@ -135,7 +153,6 @@ export default function PersonalizedStoryReader() {
             console.log('Fetching student data for story:', story.student);
             fetchStudentData(story.student);
         }
-        // Load saved activities when story loads
         if (story?.savedActivities && story.savedActivities.length > 0) {
             setSavedActivities(story.savedActivities);
         }
@@ -167,9 +184,7 @@ export default function PersonalizedStoryReader() {
         }
     };
 
-    // Helper function to determine if survey should be shown
     const shouldShowBehavioralSurvey = (sessionCount) => {
-        // Show for all sessions
         return true;
     };
 
@@ -180,7 +195,6 @@ export default function PersonalizedStoryReader() {
             if (res.ok) {
                 const data = await res.json();
                 setStudentData(data.student);
-                // Behavioral survey will be shown inline based on shouldShowBehavioralSurvey
             } else {
                 console.error('Failed to fetch student data:', res.status, res.statusText);
             }
@@ -202,6 +216,7 @@ export default function PersonalizedStoryReader() {
         return `${mins}m ${secs}s`;
     };
 
+    // Play audio for a scene
     const fetchAndPlayAudio = async (text, sceneIndexToUpdate = -1) => {
         if (!selectedVoiceId || !text || !audioRef.current) return;
 
@@ -227,6 +242,7 @@ export default function PersonalizedStoryReader() {
             const apiEndpoint = isElevenLabsVoice ? '/api/generate-speech-elevenlabs' : '/api/generate-speech-polly';
 
             // Explicitly decide whether content is Arabic (by language or Arabic voice selection)
+            const hasArabicText = !!story?.story_content_arabic;
             const isArabic = (language === 'ar' && hasArabicText) || isArabicVoice;
 
             const response = await fetch(apiEndpoint, {
@@ -242,7 +258,6 @@ export default function PersonalizedStoryReader() {
 
             const data = await response.json();
             const audioDataUrl = data.audio;
-
 
             if (sceneIndexToUpdate !== -1) {
                 setCurrentSceneIndex(sceneIndexToUpdate);
@@ -266,12 +281,14 @@ export default function PersonalizedStoryReader() {
 
             audioRef.current.onerror = (e) => {
                 console.error("Audio playback error:", e);
+                setIsReading(false);
             };
 
             await audioRef.current.play();
 
         } catch (err) {
             console.error("Error in fetchAndPlayAudio:", err);
+            setIsReading(false);
         }
     };
 
@@ -281,7 +298,6 @@ export default function PersonalizedStoryReader() {
         try {
             const html2pdf = (await import('html2pdf.js')).default;
 
-            // Determine footer text based on story source
             let footerText;
             if (story.source === 'uploaded') {
                 footerText = story.authorName ? `Story by ${story.authorName}` : 'Uploaded story';
@@ -291,7 +307,6 @@ export default function PersonalizedStoryReader() {
                 footerText = 'From the System Library';
             }
 
-            // Determine content to display based on story type
             const hasVisualScenes = story.visualScenes && story.visualScenes.length > 0;
             const hasTextContent = story.generatedText || story.story_content;
             const totalPages = hasVisualScenes ? story.visualScenes.length : 1;
@@ -304,97 +319,34 @@ export default function PersonalizedStoryReader() {
 
             tempDiv.innerHTML = `
           <div id="pdf-content" style="font-family: Arial;">
-            <!-- Header -->
-            <div style="
-              border-bottom: 2px solid #7c3aed; 
-              padding-bottom: 15px; 
-              margin-bottom: 30px; 
-              text-align: center;
-            ">
-              <h1 style="
-                color: #7c3aed; 
-                font-size: 28px; 
-                margin: 0 0 10px 0; 
-                font-weight: bold;
-              ">${story.title}</h1>
-    
-              <div style="
-                color: #6b7280; 
-                font-size: 12px;
-              ">Date: ${new Date().toLocaleDateString()}</div>
+            <div style="border-bottom: 2px solid #7c3aed; padding-bottom: 15px; margin-bottom: 30px; text-align: center;">
+              <h1 style="color: #7c3aed; font-size: 28px; margin: 0 0 10px 0; font-weight: bold;">${story.title}</h1>
+              <div style="color: #6b7280; font-size: 12px;">Date: ${new Date().toLocaleDateString()}</div>
             </div>
-            
-            <!-- Story Content -->
             ${hasVisualScenes
                     ? story.visualScenes.map((scene, index) => `
-                    <div style="
-                      page-break-after: ${index < story.visualScenes.length - 1 ? 'always' : 'auto'}; 
-                      margin-bottom: 30px;
-                      padding: 20px;
-                      border: 1px solid #e5e7eb;
-                      border-radius: 8px;
-                      background-color: #fafafa;
-                    ">
+                    <div style="page-break-after: ${index < story.visualScenes.length - 1 ? 'always' : 'auto'}; margin-bottom: 30px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #fafafa;">
                       ${scene.image ? `
                         <div style="width: 100%; text-align: center; margin: 15px 0;">
-                          <img src="${scene.image}" style="
-                            max-width: 60%;
-                            height: auto;
-                            display: block;
-                            margin: 0 auto;
-                            border-radius: 6px;
-                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                          " />
+                          <img src="${scene.image}" style="max-width: 60%; height: auto; display: block; margin: 0 auto; border-radius: 6px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" />
                         </div>
                       ` : ''}
-                      <div style="
-                        font-size: 20px; 
-                        line-height: 1.7; 
-                        color: #374151;
-                        text-align: justify;
-                      ">${scene.text}</div>
+                      <div style="font-size: 20px; line-height: 1.7; color: #374151; text-align: justify;">${scene.text}</div>
                     </div>
                   `).join('')
                     : `
-                    <div style="
-                      margin-bottom: 30px;
-                      padding: 20px;
-                      border: 1px solid #e5e7eb;
-                      border-radius: 8px;
-                      background-color: #fafafa;
-                    ">
-                      <div style="
-                        font-size: 20px; 
-                        line-height: 1.7; 
-                        color: #374151;
-                        text-align: justify;
-                        white-space: pre-line;
-                      ">${story.generatedText || story.story_content}</div>
+                    <div style="margin-bottom: 30px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #fafafa;">
+                      <div style="font-size: 20px; line-height: 1.7; color: #374151; text-align: justify; white-space: pre-line;">${story.generatedText || story.story_content}</div>
                     </div>
                   `
                 }
-            
-            <!-- Footer -->
-            <div style="
-              border-top: 2px solid #7c3aed; 
-              padding-top: 15px; 
-              margin-top: 30px; 
-              text-align: center;
-              color: #6b7280;
-              font-size: 12px;
-            ">
-              <div style="margin-bottom: 5px;">
-                ${footerText}
-              </div>
-              <div>
-                Page 1 of ${totalPages} | 
-                ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}
-              </div>
+            <div style="border-top: 2px solid #7c3aed; padding-top: 15px; margin-top: 30px; text-align: center; color: #6b7280; font-size: 12px;">
+              <div style="margin-bottom: 5px;">${footerText}</div>
+              <div>Page 1 of ${totalPages} | ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
             </div>
           </div>
         `;
 
-            // Image conversion logic
             const convertImagesToDataUrls = async () => {
                 const images = tempDiv.querySelectorAll('img');
                 for (const img of images) {
@@ -461,12 +413,20 @@ export default function PersonalizedStoryReader() {
     };
 
     const handleStartReading = () => {
+        if (readingMode === 'avatar') {
+            // Open avatar reading in new window
+            const avatarReadUrl = `/dashboard/social-stories/${id}/avatar-read`;
+            window.open(avatarReadUrl, '_blank', 'width=1920,height=1080');
+            return;
+        }
+
+        // Audio mode
         if (!selectedVoiceId) {
             alert('Please select a voice first.');
             return;
         }
 
-        if (isPaused && audioRef.current.src) {
+        if (isPaused && audioRef.current?.src) {
             try {
                 audioRef.current.play();
                 setIsReading(true);
@@ -477,14 +437,13 @@ export default function PersonalizedStoryReader() {
             }
         }
 
-        // Lock reading language at start so it remains consistent across scenes
         readingLanguageRef.current = language;
 
+        const hasArabicText = !!story?.story_content_arabic;
         let textToPlay = '';
         let initialSceneIndex = 0;
 
         if (story?.visualScenes?.length > 0) {
-            // Use per-scene text based on current language
             textToPlay = getSceneTextByIndex(currentSceneIndex);
             initialSceneIndex = currentSceneIndex;
         } else if (story?.generatedText) {
@@ -506,19 +465,24 @@ export default function PersonalizedStoryReader() {
         }
 
         setReadingProgress(0);
-
         fetchAndPlayAudio(textToPlay, isVisualStory ? initialSceneIndex : -1);
     };
 
     const handleRestartReading = () => {
+        if (readingMode === 'avatar') {
+            // For avatar mode, just open the window again
+            handleStartReading();
+            return;
+        }
+
         handleStopReading();
         setCurrentSceneIndex(0);
         setReadingProgress(0);
 
         setTimeout(() => {
+            const hasArabicText = !!story?.story_content_arabic;
             let textToPlay = '';
             if (story?.visualScenes?.length > 0) {
-                // Start from scene 0 in the selected language
                 textToPlay = getSceneTextByIndex(0);
             } else if (story?.generatedText) {
                 textToPlay = language === 'ar' && hasArabicText
@@ -546,7 +510,6 @@ export default function PersonalizedStoryReader() {
 
         setIsGeneratingActivity(true);
         try {
-            // Get previous feedback from story
             const previousFeedback = story.activityFeedback || [];
 
             const res = await fetch('/api/generate-activity', {
@@ -593,11 +556,9 @@ export default function PersonalizedStoryReader() {
 
         setActivityRating(rating);
 
-        // If rating < 3, show feedback input
         if (rating < 3) {
             setShowFeedbackInput(true);
         } else {
-            // If rating >= 3, save immediately
             await saveActivityRating(rating, null);
         }
     };
@@ -624,12 +585,10 @@ export default function PersonalizedStoryReader() {
             const data = await res.json();
             setStory(data.story);
 
-            // Update saved activities if rating >= 3
             if (rating >= 3 && data.story.savedActivities) {
                 setSavedActivities(data.story.savedActivities);
             }
 
-            // Reset state
             if (rating >= 3) {
                 setSuggestedActivity('');
                 setActivityRating(0);
@@ -710,7 +669,6 @@ export default function PersonalizedStoryReader() {
     const handleSaveSession = async () => {
         if (!story || !id) return;
 
-        // Validate session notes is required
         if (!sessionNotes || !sessionNotes.trim()) {
             alert('Please add session notes before saving the session.');
             return;
@@ -718,7 +676,6 @@ export default function PersonalizedStoryReader() {
 
         handleStopReading();
 
-        // Stop timer when saving session
         if (timerRef.current) {
             clearInterval(timerRef.current);
             timerRef.current = null;
@@ -753,8 +710,6 @@ export default function PersonalizedStoryReader() {
             resetSessionState();
 
             alert('Session saved successfully!');
-
-            // Behavioral survey will be shown inline based on shouldShowBehavioralSurvey
         } catch (err) {
             console.error('Error saving session:', err);
             setError(`Failed to save session: ${err.message}`);
@@ -777,16 +732,14 @@ export default function PersonalizedStoryReader() {
 
     const isVisualStory = story.visualScenes && story.visualScenes.length > 0;
     const hasArabicText = !!story.story_content_arabic;
-    const hasEnglishLongText = !!story.story_content; // gate for Arabic voices and toggle visibility
+    const hasEnglishLongText = !!story.story_content;
 
-    // For visual stories, align Arabic long text to scenes by splitting on blank lines
     const arabicScenes = hasArabicText
         ? story.story_content_arabic.split('\n\n').filter((s) => s.trim())
         : [];
 
     const getSceneTextByIndex = (index) => {
         if (!isVisualStory) return '';
-        // Use readingLanguageRef only when actively reading, otherwise use current language state
         const lang = isReading ? (readingLanguageRef.current || language) : language;
         if (lang === 'ar' && hasArabicText) {
             return arabicScenes[index] || story.visualScenes[index]?.text || '';
@@ -802,6 +755,8 @@ export default function PersonalizedStoryReader() {
     const totalScenesForProgress = isVisualStory ? story.visualScenes.length : 1;
     const questionsTotal = isVisualStory ? story.visualScenes.length : 4;
     const isArabicDisplay = language === 'ar' && hasArabicText;
+    const currentScene = story.visualScenes?.[currentSceneIndex];
+    const currentVideoUrl = currentScene?.video;
 
     return (
         <div className="min-h-screen p-6 bg-gray-50">
@@ -823,10 +778,8 @@ export default function PersonalizedStoryReader() {
 
             <div className={`flex items-center gap-3 ${story?.goal ? '' : 'mb-6'}`}>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-800 to-pink-600 bg-clip-text text-transparent">
-
                     {story.title}</h1>
 
-                {/* Three-dot menu */}
                 <div className="ml-2 relative" ref={menuRef}>
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -838,7 +791,6 @@ export default function PersonalizedStoryReader() {
 
                     {isMenuOpen && (
                         <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl py-1 z-50 border border-gray-100 overflow-hidden">
-                            {/* Edit Story Option - Only show for non-system stories created by current user */}
                             {story.source !== 'system' && story.createdBy === session?.user?.id && (
                                 <button
                                     onClick={() => {
@@ -852,7 +804,6 @@ export default function PersonalizedStoryReader() {
                                 </button>
                             )}
 
-                            {/* Print Story Option */}
                             <button
                                 onClick={() => {
                                     handlePrintStory(story);
@@ -864,7 +815,6 @@ export default function PersonalizedStoryReader() {
                                 <span>Print Story</span>
                             </button>
 
-                            {/* Personalize Story Option */}
                             <button
                                 onClick={() => {
                                     router.push(`/dashboard/social-stories/${story._id}/personalize`);
@@ -886,12 +836,13 @@ export default function PersonalizedStoryReader() {
                     <p className="text-sm text-purple-800 inline">{story.goal}</p>
                 </div>
             )}
-            <div className="flex items-center gap-3 mb-6">
-                <div className="relative w-full max-w-xs">
+            <div className="flex items-center gap-3 mb-6 flex-wrap">
+                {/* Reading Mode Toggle */}
+                <div className="relative w-full max-w-[200px]">
                     <select
-                        value={selectedVoiceId}
+                        value={readingMode}
                         onChange={(e) => {
-                            setSelectedVoiceId(e.target.value);
+                            setReadingMode(e.target.value);
                             handleStopReading();
                         }}
                         disabled={isReading}
@@ -905,19 +856,10 @@ export default function PersonalizedStoryReader() {
       ${isReading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
     `}
                     >
-                        <option value="">Select Voice</option>
-                        {(
-                            (language === 'ar' && hasArabicText)
-                                ? fixedVoices.filter(v => v.id !== 'Ivy' && v.id !== 'Justin')
-                                : fixedVoices
-                        ).map((voice) => (
-                            <option key={voice.id} value={voice.id}>
-                                {voice.name}
-                            </option>
-                        ))}
+                        <option value="audio">Audio Only</option>
+                        <option value="avatar">Read with Avatar</option>
                     </select>
 
-                    {/* Custom dropdown arrow */}
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                         <svg
                             className={`w-5 h-5 text-gray-400 ${isReading ? 'opacity-70' : ''}`}
@@ -934,16 +876,64 @@ export default function PersonalizedStoryReader() {
                     </div>
                 </div>
 
-                {/* Reader speed selector */}
-                <div className="relative w-full max-w-[160px]">
-                    <select
-                        value={readerSpeed}
-                        onChange={(e) => {
-                            setReaderSpeed(parseFloat(e.target.value));
-                            handleStopReading();
-                        }}
-                        disabled={isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd'))}
-                        className={`
+                {/* Voice and Speed selectors - only show for audio mode */}
+                {readingMode === 'audio' && (
+                    <>
+                        <div className="relative w-full max-w-xs">
+                            <select
+                                value={selectedVoiceId}
+                                onChange={(e) => {
+                                    setSelectedVoiceId(e.target.value);
+                                    handleStopReading();
+                                }}
+                                disabled={isReading}
+                                className={`
+      w-full px-4 py-2.5 pr-10 
+      border border-gray-300 rounded-lg 
+      bg-white text-gray-800
+      focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-transparent
+      transition-all duration-200
+      appearance-none
+      ${isReading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
+    `}
+                            >
+                                <option value="">Select Voice</option>
+                                {(
+                                    (language === 'ar' && hasArabicText)
+                                        ? fixedVoices.filter(v => v.id !== 'Ivy' && v.id !== 'Justin')
+                                        : fixedVoices
+                                ).map((voice) => (
+                                    <option key={voice.id} value={voice.id}>
+                                        {voice.name}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <svg
+                                    className={`w-5 h-5 text-gray-400 ${isReading ? 'opacity-70' : ''}`}
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                        clipRule="evenodd"
+                                    />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div className="relative w-full max-w-[160px]">
+                            <select
+                                value={readerSpeed}
+                                onChange={(e) => {
+                                    setReaderSpeed(parseFloat(e.target.value));
+                                    handleStopReading();
+                                }}
+                                disabled={isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd'))}
+                                className={`
       w-full px-4 py-2.5 pr-10 
       border border-gray-300 rounded-lg 
       bg-white text-gray-800
@@ -952,34 +942,36 @@ export default function PersonalizedStoryReader() {
       appearance-none
       ${isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd')) ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
     `}
-                    >
-                        {speedOptions.map((s) => (
-                            <option key={s} value={s}>{`Speed: ${s}`}</option>
-                        ))}
-                    </select>
+                            >
+                                {speedOptions.map((s) => (
+                                    <option key={s} value={s}>{`Speed: ${s}`}</option>
+                                ))}
+                            </select>
 
-                    {/* Custom dropdown arrow */}
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                        <svg
-                            className={`w-5 h-5 text-gray-400 ${isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd')) ? 'opacity-70' : ''}`}
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                        >
-                            <path
-                                fillRule="evenodd"
-                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                clipRule="evenodd"
-                            />
-                        </svg>
-                    </div>
-                </div>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <svg
+                                    className={`w-5 h-5 text-gray-400 ${isReading || ((language === 'ar' && hasArabicText) && !(selectedVoiceId === 'Hala' || selectedVoiceId === 'Zayd')) ? 'opacity-70' : ''}`}
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                        clipRule="evenodd"
+                                    />
+                                </svg>
+                            </div>
+                        </div>
+                    </>
+                )}
 
+                {/* Start Reading button */}
                 {!isReading ? (
                     <div className="flex gap-2">
                         <button
                             onClick={handleStartReading}
-                            disabled={!selectedVoiceId || (!story.generatedText && !story.story_content && (!story.visualScenes || story.visualScenes.length === 0))}
+                            disabled={readingMode === 'audio' && (!selectedVoiceId || (!story.generatedText && !story.story_content && (!story.visualScenes || story.visualScenes.length === 0)))}
                             className="h-11 px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             <span>▶</span>
@@ -987,22 +979,24 @@ export default function PersonalizedStoryReader() {
                         </button>
                     </div>
                 ) : (
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => handleStopReading(true)}
-                            className="h-11 px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center gap-2"
-                        >
-                            <span>⏸</span>
-                            Pause
-                        </button>
-                        <button
-                            onClick={handleRestartReading}
-                            className="h-11 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-2"
-                        >
-                            <span>↻</span>
-                            Restart
-                        </button>
-                    </div>
+                    readingMode === 'audio' && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handleStopReading(true)}
+                                className="h-11 px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center gap-2"
+                            >
+                                <span>⏸</span>
+                                Pause
+                            </button>
+                            <button
+                                onClick={handleRestartReading}
+                                className="h-11 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-2"
+                            >
+                                <span>↻</span>
+                                Restart
+                            </button>
+                        </div>
+                    )
                 )}
             </div>
 
@@ -1020,6 +1014,7 @@ export default function PersonalizedStoryReader() {
                                         e.target.src = "https://via.placeholder.com/600x400/E5E7EB/6B7280?text=Image+Not+Available";
                                     }}
                                 />
+
                                 <button
                                     onClick={() => setIsImageExpanded(true)}
                                     className="absolute bottom-4 right-4 w-10 h-10 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-all duration-200 hover:scale-110 flex items-center justify-center"
@@ -1159,15 +1154,6 @@ export default function PersonalizedStoryReader() {
                             </div>
                         </div>
 
-                        {/* Story goal */}
-                        {/* {story?.goal && (
-                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
-                                <p className="text-sm font-semibold text-purple-900 inline">Story Goal: </p>
-                                <p className="text-sm text-purple-800 inline">{story.goal}</p>
-                            </div>
-                        )} */}
-
-                        {/* Behavioral Survey */}
                         {story?.isPersonalized && studentData && (
                             <button
                                 type="button"
@@ -1181,7 +1167,6 @@ export default function PersonalizedStoryReader() {
                     <div className="bg-white p-4 rounded-lg shadow-sm">
                         <h3 className="text-lg font-semibold text-gray-700 mb-3">Comprehension Check Activity</h3>
 
-                        {/* Display saved activities if available */}
                         {savedActivities.length > 0 && !suggestedActivity && (
                             <div className="mb-4 space-y-2">
                                 <p className="text-sm font-medium text-gray-600">Previously Saved Activities:</p>
@@ -1220,7 +1205,6 @@ export default function PersonalizedStoryReader() {
                             </div>
                         )}
 
-                        {/* Generate activity button when no saved activities */}
                         {savedActivities.length === 0 && !suggestedActivity && (
                             <button
                                 onClick={generateActivity}
@@ -1241,7 +1225,6 @@ export default function PersonalizedStoryReader() {
                             </button>
                         )}
 
-                        {/* Display suggested activity with rating */}
                         {suggestedActivity && (
                             <div className="space-y-4">
                                 <div className="bg-green-50 p-3 rounded-lg border border-green-200">
@@ -1252,7 +1235,6 @@ export default function PersonalizedStoryReader() {
                                     )}
                                 </div>
 
-                                {/* Star Rating */}
                                 {activityRating === 0 && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1272,7 +1254,6 @@ export default function PersonalizedStoryReader() {
                                     </div>
                                 )}
 
-                                {/* Show rating after selection */}
                                 {activityRating > 0 && (
                                     <div>
                                         <p className="text-sm font-medium text-gray-700 mb-2">Your Rating:</p>
@@ -1287,7 +1268,6 @@ export default function PersonalizedStoryReader() {
                                     </div>
                                 )}
 
-                                {/* Feedback input for low ratings */}
                                 {showFeedbackInput && activityRating < 3 && (
                                     <div className="space-y-2">
                                         <label className="block text-sm font-medium text-gray-700">

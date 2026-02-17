@@ -7,8 +7,8 @@ import ChatBot from "./ChatBot";
 const ChatBotEntry = () => {
   const pathname = usePathname();
 
-  // Hide chatbot on login and signup pages
-  if (pathname === "/" || pathname.startsWith("/register")) {
+  // Hide chatbot on login, signup, and avatar-read pages
+  if (pathname === "/" || pathname.startsWith("/register") || pathname.includes("/avatar-read")) {
     return null;
   }
 

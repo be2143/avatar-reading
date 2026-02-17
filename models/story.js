@@ -5,6 +5,7 @@ const sceneSchema = new Schema({
   title: { type: String },
   text: { type: String, required: true },
   image: { type: String },
+  video: { type: String }, // Avatar video URL
 });
 
 const activitySchema = new Schema({
