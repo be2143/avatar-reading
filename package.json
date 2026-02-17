@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "node scripts/fix-react-cjs.js"
   },
   "dependencies": {
     "@aws-sdk/client-polly": "^3.864.0",
