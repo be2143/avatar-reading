@@ -40,19 +40,7 @@ This command reads the `package.json` file and installs all the listed dependenc
 Create a file named **`.env`** in the root of your project and add the following environment variables. **Remember to replace these placeholder values with your actual API keys and secrets.**
 
 ```bash
-MONGODB_URI=mongodb+srv://be2143:HbnUc1DeihKQ0lUG@cluster0.enjzhry.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-GEMINI_API_KEY=AIzaSyDVIwuwepnL9Zyrxt6TAZVVIPKnAWyRj8E
-GPT_API_KEY=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
-NEXTAUTH_URL=http://localhost:3000
-SEGMIND_API_KEY=SG_316d207b269a07b1
-CLOUDINARY_CLOUD_NAME=dvyf1nf8s
-CLOUDINARY_API_KEY=242239469272267
-CLOUDINARY_API_SECRET=F_tDN9qL6b3o84jOxJYX2zGLV3Q
-AWS_ACCESS_KEY_ID=AKIAUQ4L3FG3S5KYPE66
-AWS_SECRET_ACCESS_KEY=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
-UPSTASH_REDIS_REST_URL=https://special-dog-21226.upstash.io
-UPSTASH_REDIS_REST_TOKEN=AVLqAAIncDEyN2U1YmZiMGQyMGU0YWI0OTY1YjBkZDUyMzY0MjUwNnAxMjEyMjY
-NEXTAUTH_SECRET=YOUR_GENERATED_SECRET_HERE
+
 ```
 Generate NEXTAUTH_SECRET:
 
